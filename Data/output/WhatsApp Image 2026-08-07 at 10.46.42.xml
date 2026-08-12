@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<nfeProc xmlns="http://www.portalfiscalsenef.fazenda.gov.br/nfe" versao="4.00">
+  <NFe>
+    <infNFe Id="NFe4126080890220300018562001000017481069029" versao="4.00">
+      <ide>
+        <nNF>000001748</nNF>
+        <serie>001</serie>
+        <natOp>NOTA FISCAL FATURA</natOp>
+        <tpNF>1</tpNF>
+        <dhEmi>04/08/2026</dhEmi>
+        <dhSaiEnt/>
+      </ide>
+      <emit>
+        <xNome>BALDUSSI SOLUCOES LTDA</xNome>
+        <xFant>baldussi TELECOM</xFant>
+        <CNPJ>08.902.203/0001-85</CNPJ>
+        <IE>9072829457</IE>
+        <enderEmit>
+          <xLgr>Rua Doutor Brasilio Vicente De Castro, 111</xLgr>
+          <xBairro>Campo Comprido</xBairro>
+          <xMun>CURITIBA</xMun>
+          <UF>PR</UF>
+          <CEP>81200-526</CEP>
+        </enderEmit>
+      </emit>
+      <dest>
+        <xNome>INTEC INTEGRACAO NACIONAL DE TRANSPORTES DE ENCOMENDAS E CAR</xNome>
+        <CNPJ>52.134.798/0001-68</CNPJ>
+        <IE>373120755115</IE>
+        <enderDest>
+          <xLgr>AVENIDA CAIO COTRIM, 1100</xLgr>
+          <xBairro>ITAQUI</xBairro>
+          <xMun>ITAPEVI</xMun>
+          <UF>SP</UF>
+          <CEP>06696-060</CEP>
+        </enderDest>
+      </dest>
+      <total>
+        <ICMSTot>
+          <vBC>7932.39</vBC>
+          <vICMS>951.89</vICMS>
+          <vBCST>0.00</vBCST>
+          <vST>0.00</vST>
+          <vProd>7932.39</vProd>
+          <vFrete>0.00</vFrete>
+          <vSeg>0.00</vSeg>
+          <vDesc>0.00</vDesc>
+          <vII>0.00</vII>
+          <vIPI>0.00</vIPI>
+          <vNF>7932.39</vNF>
+        </ICMSTot>
+      </total>
+      <transp>
+        <transporta>
+          <xNome/>
+          <CNPJ/>
+          <IE/>
+        </transporta>
+        <veicTransp>
+          <placa/>
+          <UF/>
+        </veicTransp>
+      </transp>
+      <det nItem="1">
+        <prod>
+          <cProd/>
+          <xProd>LOCAÇÃO DE PABX EM NUVEM</xProd>
+          <NCM/>
+          <CFOP>6303</CFOP>
+          <uCom>Minuto</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>5194.5500</vUnCom>
+          <vProd>5194.55</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMSSN102>
+              <orig>0</orig>
+              <CSOSN>102</CSOSN>
+            </ICMSSN102>
+          </ICMS>
+        </imposto>
+      </det>
+      <det nItem="2">
+        <prod>
+          <cProd/>
+          <xProd>DID</xProd>
+          <NCM/>
+          <CFOP>6303</CFOP>
+          <uCom>Minuto</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>129.8600</vUnCom>
+          <vProd>129.86</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMSSN102>
+              <orig>0</orig>
+              <CSOSN>102</CSOSN>
+            </ICMSSN102>
+          </ICMS>
+        </imposto>
+      </det>
+      <det nItem="3">
+        <prod>
+          <cProd/>
+          <xProd>LOCAÇÃO DE PABX EM NUVEM</xProd>
+          <NCM/>
+          <CFOP>6303</CFOP>
+          <uCom>Minuto</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>10.7100</vUnCom>
+          <vProd>10.71</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMSSN102>
+              <orig>0</orig>
+              <CSOSN>102</CSOSN>
+            </ICMSSN102>
+          </ICMS>
+        </imposto>
+      </det>
+      <det nItem="4">
+        <prod>
+          <cProd/>
+          <xProd>LOCAÇÃO DE PABX EM NUVEM</xProd>
+          <NCM/>
+          <CFOP>6303</CFOP>
+          <uCom>Minuto</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>2597.2700</vUnCom>
+          <vProd>2597.27</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMSSN102>
+              <orig>0</orig>
+              <CSOSN>102</CSOSN>
+            </ICMSSN102>
+          </ICMS>
+        </imposto>
+      </det>
+    </infNFe>
+  </NFe>
+</nfeProc>

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/

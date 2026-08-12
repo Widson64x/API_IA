@@ -9,25 +9,19 @@ from App.Services.BaseExtractorService import DANFEExtratorBase
 from App.Services.GeminiExtractorService import ExtratorGemini
 from App.Services.OpenAIExtractorService import ExtratorOpenAI
 from App.Services.ClaudeExtractorService import ExtratorClaude
-from App.Services.DeepSeekExtractorService import ExtratorDeepSeek
+from App.Services.OpenRouterExtractorService import ExtratorOpenRouter
+from App.Services.GroqExtractorService import ExtratorGroq
 
 
 class ExtratorFabrica:
     """Fábrica responsável por criar e retornar instâncias de extratores de DANFE."""
 
     _MAPEAMENTO_EXTRATORES: Dict[str, Type[DANFEExtratorBase]] = {
-        "gemini-flash": ExtratorGemini,
-        "gemini-2.0-flash": ExtratorGemini,
-        "gemini-1.5-flash": ExtratorGemini,
-        "gpt-4o-mini": ExtratorOpenAI,
-        "gpt-4o": ExtratorOpenAI,
+        "gemini": ExtratorGemini,
         "openai": ExtratorOpenAI,
-        "claude-3-5-sonnet": ExtratorClaude,
         "claude": ExtratorClaude,
-        "deepseek-chat": ExtratorDeepSeek,
-        "deepseek": ExtratorDeepSeek,
-        "openrouter-free": ExtratorDeepSeek,
-        "openrouter": ExtratorDeepSeek,
+        "openrouter": ExtratorOpenRouter,
+        "groq": ExtratorGroq,
     }
 
     @classmethod
@@ -35,7 +29,7 @@ class ExtratorFabrica:
         """Instancia o extrator correspondente ao identificador do modelo informado.
 
         Args:
-            modelo_ia (str): Nome ou alias do modelo de IA (ex: 'gemini-flash', 'gpt-4o-mini').
+            modelo_ia (str): Nome exato do provedor ('gemini', 'openai', 'claude', 'openrouter', 'groq').
 
         Returns:
             DANFEExtratorBase: Instância concreta de uma subclasse de DANFEExtratorBase.
@@ -48,21 +42,21 @@ class ExtratorFabrica:
         if modelo_normalizado not in cls._MAPEAMENTO_EXTRATORES:
             modelos_disponiveis = ", ".join(cls._MAPEAMENTO_EXTRATORES.keys())
             raise ValueError(
-                f"Modelo de IA '{modelo_ia}' não suportado. Modelos disponíveis: {modelos_disponiveis}"
+                f"Provedor de IA '{modelo_ia}' não suportado. Provedores disponíveis: {modelos_disponiveis}"
             )
 
         classe_extrator = cls._MAPEAMENTO_EXTRATORES[modelo_normalizado]
 
-        # Passa o nome específico se o modelo exigir customização
+        # Passa o nome específico se o provedor exigir customização
         if issubclass(classe_extrator, ExtratorGemini):
-            nome_modelo_real = "gemini-2.0-flash" if "2.0" in modelo_normalizado else "gemini-1.5-flash"
-            return classe_extrator(nome_modelo=nome_modelo_real)
+            return classe_extrator(nome_modelo="gemini-1.5-flash")
         elif issubclass(classe_extrator, ExtratorOpenAI):
-            nome_modelo_real = "gpt-4o" if modelo_normalizado == "gpt-4o" else "gpt-4o-mini"
-            return classe_extrator(nome_modelo=nome_modelo_real)
+            return classe_extrator(nome_modelo="gpt-4o-mini")
         elif issubclass(classe_extrator, ExtratorClaude):
             return classe_extrator(nome_modelo="claude-3-5-sonnet-20241022")
-        elif issubclass(classe_extrator, ExtratorDeepSeek):
-            return classe_extrator(nome_modelo=modelo_normalizado)
+        elif issubclass(classe_extrator, ExtratorOpenRouter):
+            return classe_extrator(nome_modelo="openrouter")
+        elif issubclass(classe_extrator, ExtratorGroq):
+            return classe_extrator(nome_modelo="qwen/qwen3.6-27b")
 
         return classe_extrator()

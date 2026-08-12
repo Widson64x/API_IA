@@ -1,15 +1,20 @@
-"""Roteador FastAPI para recepção e extração de documentos DANFE.
+"""Roteador FastAPI para recepcao e extracao de documentos DANFE.
 
 Disponibiliza o endpoint principal para recebimento de arquivos via upload (multiformat)
-e orquestração com os modelos de Inteligência Artificial selecionados.
+e orquestracao com os modelos de Inteligencia Artificial selecionados.
+Todos os endpoints sao protegidos por autenticacao JWT e rate limiting.
 """
 
 import time
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 
+from App.Core.Dependencias import aplicar_rate_limit
+from App.Core.GerenciadorMetricas import registrar_consumo
+from App.Schemas.AuthSchema import DadosCliente
 from App.Schemas.DanfeSchema import MetadadosProcessamento, RespostaExtracaoDANFE
+from App.Core.Config import configuracao
 from App.Services.ExtractorFactory import ExtratorFabrica
-from App.Services.XmlGeneratorService import ServidorGeracaoArquivos
+from pathlib import Path
 
 roteador_danfe = APIRouter(prefix="/api/v1/danfe", tags=["DANFE Extrator"])
 
@@ -20,24 +25,31 @@ EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
     "/extrair",
     response_model=RespostaExtracaoDANFE,
     status_code=status.HTTP_200_OK,
-    summary="Extrai dados estruturados de uma DANFE",
-    description="Recebe um arquivo (PDF ou Imagem) e processa a extração de dados da DANFE através do modelo de IA selecionado, salvando os resultados em JSON e XML em Data/output."
+    summary="Extrai dados estruturados de uma NF/DANFE",
+    description="Recebe um arquivo (PDF ou Imagem) e processa a extracao de dados da NF atraves do modelo de IA selecionado, salvando o resultado em JSON na pasta Data/output."
 )
 async def extrair_danfe(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
-    modelo_ia: str = Form("gemini-flash", description="Modelo de IA a utilizar (gemini-flash, gpt-4o-mini, claude-3-5-sonnet, deepseek-chat)")
+    modelo_ia: str = Form("gemini-flash", description="Modelo de IA a utilizar (gemini-flash, gpt-4o-mini, claude-3-5-sonnet, deepseek-chat)"),
+    cliente: DadosCliente = Depends(aplicar_rate_limit)
 ) -> RespostaExtracaoDANFE:
     """Endpoint HTTP para recebimento e processamento de documentos DANFE.
 
+    Requer autenticacao JWT via header 'Authorization: Bearer <token>'.
+    Rate limiting aplicado automaticamente por cliente.
+
     Args:
-        file (UploadFile): Arquivo enviado pelo cliente no formulário multipart.
-        modelo_ia (str): Identificador do modelo de IA desejado. Padrão 'gemini-flash'.
+        background_tasks (BackgroundTasks): Injetor de tarefas em background do FastAPI.
+        file (UploadFile): Arquivo enviado pelo cliente no formulario multipart.
+        modelo_ia (str): Identificador do modelo de IA desejado. Padrao 'gemini-flash'.
+        cliente (DadosCliente): Dados do cliente autenticado (injetado via dependency).
 
     Returns:
-        RespostaExtracaoDANFE: Resposta padronizada contendo sucesso, dados extraídos e metadados.
+        RespostaExtracaoDANFE: Resposta padronizada contendo sucesso, dados extraidos e metadados.
 
     Raises:
-        HTTPException: Em caso de extensão inválida ou erro no processamento da IA.
+        HTTPException: Em caso de extensao invalida ou erro no processamento da IA.
     """
     nome_arquivo = file.filename or "documento_danfe.pdf"
     extensao = nome_arquivo.lower().split(".")[-1]
@@ -45,7 +57,7 @@ async def extrair_danfe(
     if extensao not in EXTENSOES_PERMITIDAS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Formato de arquivo '.{extensao}' não suportado. Formatos aceitos: {', '.join(EXTENSOES_PERMITIDAS)}"
+            detail=f"Formato de arquivo '.{extensao}' nao suportado. Formatos aceitos: {', '.join(EXTENSOES_PERMITIDAS)}"
         )
 
     tempo_inicio = time.perf_counter()
@@ -53,20 +65,22 @@ async def extrair_danfe(
     try:
         conteudo_bytes = await file.read()
         
-        # Obtém o extrator configurado para o modelo informado via Factory Pattern
+        # Obtem o extrator configurado para o modelo informado via Factory Pattern
         extrator = ExtratorFabrica.obter_extrator(modelo_ia)
         
-        # Realiza a extração dos dados da DANFE
+        # Realiza a extracao dos dados da DANFE
         dados_extraidos = await extrator.extrair_dados(
             conteudo_arquivo=conteudo_bytes,
             nome_arquivo=nome_arquivo
         )
 
-        # Salva automaticamente os arquivos JSON e XML formatados na pasta Data/output
-        ServidorGeracaoArquivos.salvar_arquivos_saida(
-            dados=dados_extraidos,
-            nome_arquivo_original=nome_arquivo
-        )
+        # Salva automaticamente o arquivo JSON formatado na pasta Data/output
+        configuracao.DIR_OUTPUT.mkdir(parents=True, exist_ok=True)
+        nome_base = Path(nome_arquivo).stem
+        caminho_json = configuracao.DIR_OUTPUT / f"{nome_base}.json"
+        
+        with open(caminho_json, "w", encoding="utf-8") as file_json:
+            file_json.write(dados_extraidos.model_dump_json(indent=2))
 
         tempo_total = round(time.perf_counter() - tempo_inicio, 3)
         nome_provedor = extrator.__class__.__name__.replace("Extrator", "")
@@ -78,9 +92,17 @@ async def extrair_danfe(
             nome_arquivo_original=nome_arquivo
         )
 
+        # Agenda o registro de consumo em background para nao atrasar a resposta
+        background_tasks.add_task(
+            registrar_consumo,
+            cliente_id=cliente.cliente_id,
+            rota="/api/v1/danfe/extrair",
+            modelo_ia=modelo_ia
+        )
+
         return RespostaExtracaoDANFE(
             sucesso=True,
-            mensagem="Dados da DANFE extraídos com sucesso.",
+            mensagem="Dados da DANFE extraidos com sucesso.",
             dados=dados_extraidos,
             metadados=metadados
         )
@@ -95,3 +117,4 @@ async def extrair_danfe(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ocorreu um erro interno durante o processamento da IA: {str(erro_interno)}"
         )
+

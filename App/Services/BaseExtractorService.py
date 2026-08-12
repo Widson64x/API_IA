@@ -73,6 +73,11 @@ class DANFEExtratorBase(ABC):
             ValueError: Caso a resposta não possa ser serializada como JSON válido.
         """
         texto_limpo = texto_resposta.strip()
+
+        # Remove blocos de raciocínio/thinking de modelos com modo reasoning (ex: Qwen 3.6)
+        # Trata tanto blocos fechados (<think>...</think>) quanto não fechados (<think>... sem </think>)
+        texto_limpo = re.sub(r"<think>[\s\S]*?</think>", "", texto_limpo).strip()
+        texto_limpo = re.sub(r"<think>[\s\S]*", "", texto_limpo).strip()
         
         # Remove delimitadores de código markdown comuns retornado por LLMs
         padrao_markdown = r"```(?:json)?\s*([\s\S]*?)\s*```"
@@ -117,11 +122,15 @@ class DANFEExtratorBase(ABC):
             return conteudo_imagem
 
     def _obter_prompt_instrucao(self) -> str:
-        """Retorna o prompt padronizado e compacto direcionando a IA para os campos essenciais.
+        """Retorna o prompt padronizado e compacto direcionando a IA para extrair as notas de devolução.
 
         Returns:
-            str: Instrução minificada garantindo foco na extração da chave de 44 dígitos.
+            str: Instrução minificada garantindo foco na extração dos dados de origem, destino e valores.
         """
-        return """Examine este documento de DANFE / Nota Fiscal e extraia com precisão os dados. Retorne APENAS um JSON compacto (sem markdown):
-{"chave_acesso":"","numero_nota":"","serie":"","natureza_operacao":"","tipo_operacao":"1","data_emissao":"","data_saida_entrada":"","emitente":{"razao_social":"","nome_fantasia":"","cnpj":"","inscricao_estadual":"","endereco":"","bairro":"","municipio":"","uf":"","cep":"","telefone":""},"destinatario":{"razao_social":"","cnpj_cpf":"","inscricao_estadual":"","endereco":"","bairro":"","municipio":"","uf":"","cep":""},"valores_totais":{"base_calculo_icms":0.0,"valor_icms":0.0,"base_calculo_icms_st":0.0,"valor_icms_st":0.0,"valor_total_produtos":0.0,"valor_frete":0.0,"valor_seguro":0.0,"desconto":0.0,"outras_despesas":0.0,"valor_ipi":0.0,"valor_total_nota":0.0},"transportador":{"razao_social":"","cnpj_cpf":"","inscricao_estadual":"","placa_veiculo":"","uf_veiculo":""},"itens":[{"codigo_produto":"","descricao":"","ncm_sh":"","cst_csosn":"","cfop":"","unidade":"","quantidade":0.0,"valor_unitario":0.0,"valor_total":0.0,"aliquota_icms":0.0,"aliquota_ipi":0.0}]}
-REGRAS: A "chave_acesso" é a sequência de 44 dígitos numéricos que fica abaixo do código de barras da DANFE. Remova espaços ou traços da chave. Se ausente, use null ou 0.0."""
+        return """Examine este documento (PDF/Imagem) contendo notas fiscais. Extraia com precisão os dados de origem, destino e valores das notas (focando em devoluções/importação). Retorne APENAS um JSON compacto (sem markdown e sem crases de bloco de código):
+{"arquivo":"","extensao":"","tamanho":"","data_criacao":"","quantidade_nota":0,"notaFiscalList":[{"origem_nome":"","origem_cnpj":"","origem_cep":"","origem_endereco":"","origem_cidade":"","origem_uf":"","origem_bairro":"","origem_numero":"","destino_nome":"","destino_cnpj":"","destino_cep":"","destino_endereco":"","destino_cidade":"","destino_uf":"","destino_bairro":"","destino_numero":"","devolucao_nota":"","devolucao_serie":"","origem_nota":"","origem_serie":"","origem_data":"","pedido":"","devolucao_peso":0.0,"devolucao_volume":0.0,"devolucao_valor":0.0}]}
+REGRAS: 
+- O campo arquivo, extensao, tamanho e data_criacao podem ficar vazios ou nulos caso não encontre no documento, o sistema os preencherá depois.
+- Para cada nota no documento, crie um item em notaFiscalList. 
+- Extraia corretamente cnpj (apenas numeros) e cep (apenas numeros).
+- Atente-se para identificar qual é a nota de devolução e qual é a nota de origem."""

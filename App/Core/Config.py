@@ -1,7 +1,8 @@
-"""Gerenciador centralizado de configurações da aplicação utilizando Pydantic Settings.
+"""Gerenciador centralizado de configuracoes da aplicacao utilizando Pydantic Settings.
 
-Carrega variáveis de ambiente do arquivo .env ou do sistema operacional,
-fornecendo acesso seguro e tipado às chaves de API dos provedores de IA.
+Carrega variaveis de ambiente do arquivo .env ou do sistema operacional,
+fornecendo acesso seguro e tipado as chaves de API dos provedores de IA
+e parametros de seguranca JWT.
 """
 
 from pathlib import Path
@@ -10,17 +11,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfiguracaoAplicacao(BaseSettings):
-    """Classe responsável pelo carregamento e validação das configurações da aplicação.
+    """Classe responsavel pelo carregamento e validacao das configuracoes da aplicacao.
 
     Attributes:
-        HOST (str): Endereço IP em que a API escutará as conexões.
-        PORT (int): Porta da aplicação.
-        DEBUG (bool): Indicador de modo de depuração.
-        GEMINI_API_KEY (Optional[str]): Chave de acesso à API do Google Gemini.
-        OPENAI_API_KEY (Optional[str]): Chave de acesso à API da OpenAI.
-        ANTHROPIC_API_KEY (Optional[str]): Chave de acesso à API da Anthropic Claude.
-        DEEPSEEK_API_KEY (Optional[str]): Chave de acesso à API da DeepSeek.
-        OPENROUTER_API_KEY (Optional[str]): Chave de acesso à API do OpenRouter.
+        HOST (str): Endereco IP em que a API escutara as conexoes.
+        PORT (int): Porta da aplicacao.
+        DEBUG (bool): Indicador de modo de depuracao.
+        GEMINI_API_KEY (Optional[str]): Chave de acesso a API do Google Gemini.
+        OPENAI_API_KEY (Optional[str]): Chave de acesso a API da OpenAI.
+        ANTHROPIC_API_KEY (Optional[str]): Chave de acesso a API da Anthropic Claude.
+        DEEPSEEK_API_KEY (Optional[str]): Chave de acesso a API da DeepSeek.
+        OPENROUTER_API_KEY (Optional[str]): Chave de acesso a API do OpenRouter.
+        SECRET_KEY (str): Chave criptografica para assinatura dos tokens JWT.
+        JWT_ALGORITHM (str): Algoritmo de assinatura JWT (padrao HS256).
+        ACCESS_TOKEN_DURACAO_MINUTOS (int): Tempo de vida do access token em minutos.
+        REFRESH_TOKEN_DURACAO_HORAS (int): Tempo de vida do refresh token em horas.
+        RATE_LIMIT_REQUISICOES_POR_MINUTO (int): Limite de requisicoes por minuto por cliente.
+        ADMIN_API_KEY (str): Chave de administracao para endpoints de gestao de clientes.
     """
 
     HOST: str = "0.0.0.0"
@@ -32,6 +39,15 @@ class ConfiguracaoAplicacao(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+
+    # Seguranca e Autenticacao JWT
+    SECRET_KEY: str = "TROQUE_ESTA_CHAVE_EM_PRODUCAO"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_DURACAO_MINUTOS: int = 30
+    REFRESH_TOKEN_DURACAO_HORAS: int = 24
+    RATE_LIMIT_REQUISICOES_POR_MINUTO: int = 60
+    ADMIN_API_KEY: str = "TROQUE_ESTA_CHAVE_EM_PRODUCAO"
 
     DIR_INPUT: Path = Path("Data/input")
     DIR_OUTPUT: Path = Path("Data/output")
@@ -43,11 +59,12 @@ class ConfiguracaoAplicacao(BaseSettings):
     )
 
     def model_post_init(self, __context) -> None:
-        """Garante que os diretórios de entrada e saída existam."""
+        """Garante que os diretorios de entrada e saida existam."""
         self.DIR_INPUT.mkdir(parents=True, exist_ok=True)
         self.DIR_OUTPUT.mkdir(parents=True, exist_ok=True)
 
 
 
-# Instância única global para reuso na aplicação
+# Instancia unica global para reuso na aplicacao
 configuracao: ConfiguracaoAplicacao = ConfiguracaoAplicacao()
+

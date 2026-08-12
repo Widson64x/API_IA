@@ -2,9 +2,25 @@
 
 API em Python desenvolvida com FastAPI para recepção de Documentos Auxiliares da Nota Fiscal Eletrônica (DANFE) em formato PDF ou Imagem (PNG, JPG, WEBP) e extração de dados estruturados utilizando Inteligência Artificial (Google Gemini, OpenAI GPT, Anthropic Claude, DeepSeek e OpenRouter).
 
+O sistema conta com um módulo robusto de **Autenticação e Administração de Clientes**, garantindo acesso seguro via JSON Web Tokens (JWT) e controle de tráfego por limites de requisição (Rate Limiting).
+
 ---
 
-## Arquitetura da Solução
+## Estrutura de Autenticação e Segurança
+
+A API protege a extração de dados através de credenciais granulares:
+
+1. **Camada Administrativa**: Endpoints de criação de clientes protegidos por uma chave mestra estática (`ADMIN_API_KEY`).
+2. **Camada de Consumo (Clientes)**: Clientes geram sua própria **API Key** uma única vez e a utilizam para solicitar Tokens Temporários (JWT).
+3. **Controle de Abuso**: Implementação de `Rate Limiting` (60 requisições por minuto por padrão).
+4. **Segurança de Armazenamento**: Apenas o hash seguro (SHA-256 + Bcrypt) das chaves de API fica armazenado no banco de dados SQLite.
+
+Para instruções completas de como gerar tokens e utilizar as rotas como cliente ou administrador, leia a documentação dedicada:
+👉 **[Guia de Uso da API (Autenticação e Extração)](Docs/GUIA_DE_USO_API.md)**
+
+---
+
+## Arquitetura de IA (Extração)
 
 O sistema utiliza os padrões de projeto **Strategy** e **Factory** para isolar a lógica dos provedores de IA:
 
@@ -14,41 +30,6 @@ O sistema utiliza os padrões de projeto **Strategy** e **Factory** para isolar 
 - **`ExtratorClaude`**: Implementação via SDK AsyncAnthropic (`claude-3-5-sonnet`).
 - **`ExtratorDeepSeek`**: Implementação via SDK OpenAI com suporte a endpoint nativo DeepSeek ou roteador OpenRouter (permite uso de modelos com camada gratuita).
 - **`ExtratorFabrica`**: Fábrica estática que instancia dinamicamente o extrator desejado a partir do parâmetro `modelo_ia` fornecido na requisição HTTP.
-
----
-
-## Estrutura do Projeto
-
-```
-IDocs_IA/
-├── App/
-│   ├── __init__.py
-│   ├── Main.py                          # Ponto de entrada da aplicação FastAPI
-│   ├── Core/
-│   │   ├── __init__.py
-│   │   └── Config.py                    # Gerenciador de configurações Pydantic Settings
-│   ├── Schemas/
-│   │   ├── __init__.py
-│   │   └── DanfeSchema.py               # Schemas Pydantic para DANFE e respostas da API
-│   ├── Services/
-│   │   ├── __init__.py
-│   │   ├── BaseExtractorService.py      # Classe abstrata DANFEExtratorBase
-│   │   ├── GeminiExtractorService.py    # Extrator Gemini Flash
-│   │   ├── OpenAIExtractorService.py    # Extrator OpenAI GPT-4o
-│   │   ├── ClaudeExtractorService.py    # Extrator Anthropic Claude
-│   │   ├── DeepSeekExtractorService.py  # Extrator DeepSeek / OpenRouter
-│   │   └── ExtractorFactory.py          # Fábrica de extratores
-│   └── Routers/
-│       ├── __init__.py
-│       └── DanfeRouter.py               # Endpoint POST /api/v1/danfe/extrair
-├── Tests/
-│   ├── __init__.py
-│   └── TestClient.py                    # Cliente de teste em lote ou arquivo único
-├── .env.example                         # Exemplo de configuração de chaves de API
-├── .gitignore                           # Ignorados do versionador
-├── requirements.txt                     # Lista de dependências Python
-└── README.md                            # Documentação do projeto
-```
 
 ---
 
@@ -70,9 +51,18 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. Configuração do Arquivo `.env`
+### 3. Gerador de Chaves de Segurança Mestre
 
-Copie o arquivo `.env.example` para `.env` e insira as chaves dos provedores que deseja utilizar:
+Para criar suas variáveis seguras de sistema (`SECRET_KEY` para geração de tokens JWT e `ADMIN_API_KEY` para gerenciamento), execute o assistente interativo:
+
+```bash
+python Scripts/GerarChaves.py
+```
+Esse utilitário criará credenciais robustas a partir da palavra-chave que você inserir e opcionalmente atualizará o arquivo `.env` para você de forma automática.
+
+### 4. Configuração do Arquivo `.env`
+
+Copie o arquivo `.env.example` para `.env` (caso o script acima já não o tenha feito) e insira as chaves dos provedores de IA que deseja utilizar e as chaves de segurança geradas:
 
 ```bash
 cp .env.example .env
@@ -81,10 +71,17 @@ cp .env.example .env
 Conteúdo do `.env`:
 
 ```env
+# Banco e Infra
 HOST=0.0.0.0
 PORT=8000
 DEBUG=True
+DB_URL=sqlite:///Data/IDocs.db
 
+# Seguranca (gere utilizando Scripts/GerarChaves.py)
+SECRET_KEY=sua_chave_jwt_aqui
+ADMIN_API_KEY=sua_chave_admin_aqui
+
+# APIs de IA
 GEMINI_API_KEY=sua_chave_gemini_aqui
 OPENAI_API_KEY=sua_chave_openai_aqui
 ANTHROPIC_API_KEY=sua_chave_claude_aqui
@@ -102,62 +99,23 @@ Para iniciar o servidor HTTP:
 python -m App.Main
 ```
 
-Ou através do Uvicorn diretamente:
-
-```bash
-uvicorn App.Main:app --reload --host 0.0.0.0 --port 8000
-```
-
 Acesse a documentação interativa Swagger UI em:
 `http://localhost:8000/docs`
 
 ---
 
-## Uso da API (Endpoints)
+## Testes Automatizados
 
-### `POST /api/v1/danfe/extrair`
+O sistema conta com rotinas de testes completas para garantir o funcionamento seguro:
 
-Requisita a extração dos dados de uma DANFE.
-
-#### Parâmetros da Requisição (Form Data / Multipart):
-- **`file`** (Arquivo binário): Arquivo da DANFE (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`).
-- **`modelo_ia`** (Texto): Identificador do modelo de IA a ser utilizado. Opções aceitas:
-  - `gemini-flash` (Padrão)
-  - `gpt-4o-mini`
-  - `gpt-4o`
-  - `claude-3-5-sonnet`
-  - `deepseek-chat`
-  - `openrouter-free`
-
-#### Exemplo de Chamada cURL:
-
+**Testar Autenticação e Segurança:**
 ```bash
-curl -X POST "http://localhost:8000/api/v1/danfe/extrair" \
-  -H "accept: application/json" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@caminho/para/danfe.pdf" \
-  -F "modelo_ia=gemini-flash"
+python Tests/TestarAutenticacao.py
 ```
 
----
+**Testar Extração de DANFE (TestClient):**
+Pode-se processar pastas inteiras de DANFEs, gerando um relatório em JSON para medir assertividade dos diferentes provedores de IA.
 
-## Testes e Relatório de Assertividade
-
-Foi desenvolvido um script dedicado em `Tests/TestClient.py` para testes avulsos e em lote (processamento de pastas inteiras de DANFEs).
-
-### Executar modo interativo:
-```bash
-python Tests/TestClient.py
-```
-
-### Executar via linha de comando para um arquivo específico:
-```bash
-python Tests/TestClient.py --arquivo caminho/para/danfe.pdf --modelo gpt-4o-mini
-```
-
-### Executar para uma pasta inteira de DANFEs:
 ```bash
 python Tests/TestClient.py --pasta caminho/para/pasta_danfes --modelo gemini-flash
 ```
-
-Ao processar uma pasta, o cliente gerará uma tabela com os dados extraídos no terminal e salvará o resultado detalhado em JSON no diretório `Tests/Relatorios/`, permitindo comparar acurácia, tempo de resposta e assertividade dos modelos.

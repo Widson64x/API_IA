@@ -31,8 +31,7 @@ EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
 async def extrair_danfe(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
-    modelo_ia: str = Form("gemini-flash", description="Modelo de IA a utilizar (gemini-flash, gpt-4o-mini, claude-3-5-sonnet, deepseek-chat)"),
-    cliente: DadosCliente = Depends(aplicar_rate_limit)
+    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek)")
 ) -> RespostaExtracaoDANFE:
     """Endpoint HTTP para recebimento e processamento de documentos DANFE.
 
@@ -52,9 +51,13 @@ async def extrair_danfe(
         HTTPException: Em caso de extensao invalida ou erro no processamento da IA.
     """
     nome_arquivo = file.filename or "documento_danfe.pdf"
+    print(f"\n[DEBUG ROUTER] Recebendo requisição para arquivo: {nome_arquivo}")
+    print(f"[DEBUG ROUTER] Modelo IA escolhido: {modelo_ia}")
+
     extensao = nome_arquivo.lower().split(".")[-1]
 
     if extensao not in EXTENSOES_PERMITIDAS:
+        print(f"[DEBUG ROUTER] Extensão não permitida: {extensao}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Formato de arquivo '.{extensao}' nao suportado. Formatos aceitos: {', '.join(EXTENSOES_PERMITIDAS)}"
@@ -64,15 +67,20 @@ async def extrair_danfe(
 
     try:
         conteudo_bytes = await file.read()
+        print(f"[DEBUG ROUTER] Arquivo lido. Tamanho: {len(conteudo_bytes)} bytes")
         
         # Obtem o extrator configurado para o modelo informado via Factory Pattern
+        print(f"[DEBUG ROUTER] Instanciando extrator...")
         extrator = ExtratorFabrica.obter_extrator(modelo_ia)
+        print(f"[DEBUG ROUTER] Extrator instanciado: {extrator.__class__.__name__}")
         
         # Realiza a extracao dos dados da DANFE
+        print(f"[DEBUG ROUTER] Iniciando extração na classe do extrator...")
         dados_extraidos = await extrator.extrair_dados(
             conteudo_arquivo=conteudo_bytes,
             nome_arquivo=nome_arquivo
         )
+        print(f"[DEBUG ROUTER] Extração concluída. Salvando JSON...")
 
         # Salva automaticamente o arquivo JSON formatado na pasta Data/output
         configuracao.DIR_OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -93,12 +101,12 @@ async def extrair_danfe(
         )
 
         # Agenda o registro de consumo em background para nao atrasar a resposta
-        background_tasks.add_task(
-            registrar_consumo,
-            cliente_id=cliente.cliente_id,
-            rota="/api/v1/danfe/extrair",
-            modelo_ia=modelo_ia
-        )
+        # background_tasks.add_task(
+        #    registrar_consumo,
+        #    cliente_id=cliente.cliente_id,
+        #    rota="/api/v1/danfe/extrair",
+        #    modelo_ia=modelo_ia
+        # )
 
         return RespostaExtracaoDANFE(
             sucesso=True,
@@ -113,6 +121,9 @@ async def extrair_danfe(
             detail=str(erro_validacao)
         )
     except Exception as erro_interno:
+        print(f"[DEBUG ROUTER] ERRO FATAL: {str(erro_interno)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ocorreu um erro interno durante o processamento da IA: {str(erro_interno)}"

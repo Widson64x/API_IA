@@ -47,18 +47,43 @@ class DANFEExtratorBase(ABC):
         Returns:
             List[bytes]: Lista contendo os bytes das imagens JPEG renderizadas de cada página.
         """
+        from PIL import Image
+        import io
+
         imagens_bytes: List[bytes] = []
         documento_pdf = pymupdf.open(stream=conteudo_pdf, filetype="pdf")
 
+        paginas_pil = []
         for numero_pagina in range(len(documento_pdf)):
             pagina = documento_pdf.load_page(numero_pagina)
             zoom = dpi / 72
             matriz = pymupdf.Matrix(zoom, zoom)
             pixmap = pagina.get_pixmap(matrix=matriz, alpha=False)
-            imagens_bytes.append(pixmap.tobytes("jpeg", jpg_quality=85))
+            
+            img_pil = Image.open(io.BytesIO(pixmap.tobytes("jpeg", jpg_quality=85)))
+            paginas_pil.append(img_pil)
 
         documento_pdf.close()
-        return imagens_bytes
+
+        if not paginas_pil:
+            return []
+
+        # Calcula a altura total e a largura maxima
+        largura_total = max(img.width for img in paginas_pil)
+        altura_total = sum(img.height for img in paginas_pil)
+
+        # Cria uma nova imagem combinada (fundo branco)
+        imagem_combinada = Image.new("RGB", (largura_total, altura_total), (255, 255, 255))
+        
+        y_offset = 0
+        for img in paginas_pil:
+            imagem_combinada.paste(img, (0, y_offset))
+            y_offset += img.height
+
+        # Salva a imagem combinada em bytes
+        buffer = io.BytesIO()
+        imagem_combinada.save(buffer, format="JPEG", quality=85)
+        return [buffer.getvalue()]
 
     def _limpar_e_converter_json(self, texto_resposta: str) -> dict:
         """Remove marcadores de bloco de código Markdown (```json ... ```) e converte o texto para dict.
@@ -75,20 +100,47 @@ class DANFEExtratorBase(ABC):
         texto_limpo = texto_resposta.strip()
 
         # Remove blocos de raciocínio/thinking de modelos com modo reasoning (ex: Qwen 3.6)
-        # Trata tanto blocos fechados (<think>...</think>) quanto não fechados (<think>... sem </think>)
-        texto_limpo = re.sub(r"<think>[\s\S]*?</think>", "", texto_limpo).strip()
-        texto_limpo = re.sub(r"<think>[\s\S]*", "", texto_limpo).strip()
-        
-        # Remove delimitadores de código markdown comuns retornado por LLMs
-        padrao_markdown = r"```(?:json)?\s*([\s\S]*?)\s*```"
-        match = re.search(padrao_markdown, texto_limpo)
+        match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", texto_limpo, re.DOTALL)
         if match:
             texto_limpo = match.group(1).strip()
 
         try:
-            return json.loads(texto_limpo)
+            parsed = json.loads(texto_limpo)
+            if not isinstance(parsed, dict):
+                raise ValueError(f"O JSON retornado não é um objeto/dicionário. Tipo retornado: {type(parsed)}")
+            
+            # Aplica mecânica de reconferência e sanitização automática
+            parsed = self._validar_e_corrigir_extracao(parsed)
+            return parsed
         except json.JSONDecodeError as erro:
             raise ValueError(f"Falha ao decodificar JSON retornado pelo modelo: {str(erro)}. Conteúdo bruto: {texto_resposta}")
+
+    def _validar_e_corrigir_extracao(self, dados: dict) -> dict:
+        """Mecânica de reconferência programática e auto-correção dos dados extraídos.
+        Garante que CNPJs, Notas Fiscais NFO/NFD e quantidades estejam no padrão correto.
+        """
+        notas = dados.get("notaFiscalList", [])
+        dados["quantidade_nota"] = len(notas)
+
+        for nota in notas:
+            rem = nota.get("Remetente", {})
+            dest = nota.get("Destinatario", {})
+            nfo = nota.get("NFO", {})
+            nfd = nota.get("NFD", {})
+
+            # 1. Sanitização de CNPJ (manter apenas números)
+            if rem.get("cnpj"):
+                rem["cnpj"] = re.sub(r"\D", "", str(rem["cnpj"]))
+            if dest.get("cnpj"):
+                dest["cnpj"] = re.sub(r"\D", "", str(dest["cnpj"]))
+
+            # 2. Impedir que Inscrições Estaduais ou códigos estranhos virem número de nota
+            for bloco in (nfo, nfd):
+                num = str(bloco.get("numero", "")).strip()
+                if len(num) > 9:  # Número de DANFE/NF tem no máximo 9 dígitos
+                    bloco["numero"] = ""
+
+        return dados
 
     def _otimizar_imagem_bytes(self, conteudo_imagem: bytes, max_dimensao: int = 1400) -> bytes:
         """Redimensiona e comprime imagens de alta resolução (ex: fotos de celular/WhatsApp)
@@ -122,15 +174,25 @@ class DANFEExtratorBase(ABC):
             return conteudo_imagem
 
     def _obter_prompt_instrucao(self) -> str:
-        """Retorna o prompt padronizado e compacto direcionando a IA para extrair as notas de devolução.
+        """Retorna o prompt padronizado e compacto direcionando a IA para extrair as notas na nova estrutura universal."""
+        return """Examine este documento de Nota Fiscal (DANFE) ou DACTE.
+Extraia os dados das notas e retorne APENAS um JSON no formato abaixo (sem markdown ou textos adicionais):
 
-        Returns:
-            str: Instrução minificada garantindo foco na extração dos dados de origem, destino e valores.
-        """
-        return """Examine este documento (PDF/Imagem) contendo notas fiscais. Extraia com precisão os dados de origem, destino e valores das notas (focando em devoluções/importação). Retorne APENAS um JSON compacto (sem markdown e sem crases de bloco de código):
-{"arquivo":"","extensao":"","tamanho":"","data_criacao":"","quantidade_nota":0,"notaFiscalList":[{"origem_nome":"","origem_cnpj":"","origem_cep":"","origem_endereco":"","origem_cidade":"","origem_uf":"","origem_bairro":"","origem_numero":"","destino_nome":"","destino_cnpj":"","destino_cep":"","destino_endereco":"","destino_cidade":"","destino_uf":"","destino_bairro":"","destino_numero":"","devolucao_nota":"","devolucao_serie":"","origem_nota":"","origem_serie":"","origem_data":"","pedido":"","devolucao_peso":0.0,"devolucao_volume":0.0,"devolucao_valor":0.0}]}
-REGRAS: 
-- O campo arquivo, extensao, tamanho e data_criacao podem ficar vazios ou nulos caso não encontre no documento, o sistema os preencherá depois.
-- Para cada nota no documento, crie um item em notaFiscalList. 
-- Extraia corretamente cnpj (apenas numeros) e cep (apenas numeros).
-- Atente-se para identificar qual é a nota de devolução e qual é a nota de origem."""
+Formato esperado:
+{"arquivo":"","extensao":"","tamanho":"","data_criacao":"","quantidade_nota":1,"notaFiscalList":[{"Remetente":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"Destinatario":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"NFO":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"NFD":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"pedido":""}]}
+
+REGRAS ESTRITAS DE EXTRAÇÃO E CONFERÊNCIA:
+1. ENTIDADES (REMETENTE vs DESTINATÁRIO):
+   - REMETENTE (Emitente da DANFE): É quem está emitindo o documento no TOPO ESQUERDO (ex: "SC DISTRIBUICAO LTDA"). O CNPJ do Remetente é o "CNPJ" impresso no topo da DANFE (ex: 01.206.820/0015-00). CUIDADO PARA NÃO INVERTER O CNPJ DO REMETENTE COM O DO DESTINATÁRIO!
+   - DESTINATÁRIO: É a empresa descrita no quadro "DESTINATÁRIO / REMETENTE" (ex: "RANBAXY FARMACEUTICA LTDA"). O CNPJ do Destinatário está no campo "CNPJ/CPF" desse quadro (ex: 73.663.650/0004-33).
+
+2. DIVISÃO DAS NOTAS (NFO vs NFD):
+   - A NOTA PRINCIPAL do documento impresso no TOPO/CABEÇALHO (quadro "Nº", ex: 2939107, série 2) deve ser colocada no bloco **NFO** (Nota Fiscal Original).
+   - A NOTA REFERENCIADA descrita no quadro "DADOS ADICIONAIS / INFORMAÇÕES COMPLEMENTARES" (ex: "Dev. Ref. NF(s). 000033759 de 11/04/2024") deve ser colocada no bloco **NFD** (Nota Fiscal de Devolução).
+
+3. VALOR TOTAL E PESO:
+   - "valor": Use o campo "VALOR TOTAL DA NOTA" (ex: 73.10) do quadro CÁLCULO DO IMPOSTO. NUNCA use valor total dos produtos nem Inscrição Estadual.
+   - "peso" e "volume": Extraia do quadro TRANSPORTADOR/VOLUMES TRANSPORTADOS.
+
+4. DADOS NUMÉRICOS:
+   - CNPJ e CEP contêm APENAS DÍGITOS NÚMEROS. Formate o valor com ponto decimal."""

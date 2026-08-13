@@ -30,17 +30,10 @@ class ExtratorOpenRouter(DANFEExtratorBase):
         self.nome_modelo = nome_modelo
         self.api_key = configuracao.OPENROUTER_API_KEY
 
-    async def _obter_modelos_gratuitos_visao_openrouter(self) -> List[str]:
-        """Consulta a API do OpenRouter em tempo real para obter modelos de visão 100% gratuitos ativos.
-
-        Returns:
-            List[str]: Lista contendo os identificadores dos modelos de visão com custo zero.
-        """
-        # Desabilitando a busca dinâmica temporariamente pois o OpenRouter está retornando 
-        # modelos em fase de teste (Nvidia/Lyria) que estão dando timeout/502.
-        # Vamos direto para o fallback que contém o modelo que funcionava antes.
-        '''
+    async def _obter_modelos_gratuitos_openrouter(self, tem_texto: bool = False) -> List[str]:
+        """Consulta a API do OpenRouter em tempo real filtrando modelos ruins."""
         try:
+            import httpx
             async with httpx.AsyncClient(timeout=10.0) as client_http:
                 resposta = await client_http.get("https://openrouter.ai/api/v1/models")
                 if resposta.status_code == 200:
@@ -55,16 +48,19 @@ class ExtratorOpenRouter(DANFEExtratorBase):
                         tem_visao = "image" in modalities or "file" in modalities
                         
                         if eh_gratuito and tem_visao:
-                            modelos_gratuitos.append(m_id)
-                    
+                            if "llama" in m_id.lower() or "qwen" in m_id.lower() or "pixtral" in m_id.lower() or "vl" in m_id.lower():
+                                modelos_gratuitos.append(m_id)
+                        
                     if modelos_gratuitos:
                         return modelos_gratuitos
         except Exception:
             pass
-        '''
-
-        # Fallback de segurança usando o modelo original do repositório GitHub
-        return ["google/gemini-2.0-flash-exp:free", "google/gemini-2.0-flash-lite-preview-02-05:free", "qwen/qwen-2.5-vl-72b-instruct:free"]
+        
+        return [
+            "qwen/qwen-2-vl-72b-instruct:free",
+            "meta-llama/llama-3.2-90b-vision-instruct:free",
+            "nvidia/nemotron-nano-12b-v2-vl:free"
+        ]
 
     async def extrair_dados(self, conteudo_arquivo: bytes, nome_arquivo: str) -> DadosDANFE:
         """Processa a NF enviando as imagens para a API do OpenRouter.
@@ -90,58 +86,90 @@ class ExtratorOpenRouter(DANFEExtratorBase):
             "HTTP-Referer": "http://localhost:8000",
             "X-Title": "IDocs_IA NF Extractor"
         }
-        
-        if self.nome_modelo in ("openrouter-free", "openrouter"):
-            modelos_tentativa = await self._obter_modelos_gratuitos_visao_openrouter()
-        else:
-            modelos_tentativa = [self.nome_modelo]
-
         # Converte PDF em imagens JPEG compactas ou otimiza imagem existente
+        texto_pdf = ""
         if extensao == "pdf":
+            try:
+                import pymupdf
+                documento_pdf = pymupdf.open(stream=conteudo_arquivo, filetype="pdf")
+                for pagina in documento_pdf:
+                    texto_pdf += pagina.get_text() + "\n"
+                documento_pdf.close()
+            except Exception as e:
+                print(f"[DEBUG OPENROUTER] Falha ao extrair texto do PDF: {e}")
+            
             lista_imagens = self._converter_pdf_para_imagens(conteudo_arquivo)
         else:
             lista_imagens = [self._otimizar_imagem_bytes(conteudo_arquivo)]
 
-        conteudo_requisicao = [{"type": "text", "text": prompt}]
+        if self.nome_modelo in ("openrouter-free", "openrouter"):
+            modelos_tentativa = await self._obter_modelos_gratuitos_openrouter(tem_texto=bool(texto_pdf.strip()))
+        else:
+            modelos_tentativa = [self.nome_modelo]
 
-        for imagem_bytes in lista_imagens:
-            base64_imagem = base64.b64encode(imagem_bytes).decode("utf-8")
-            conteudo_requisicao.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_imagem}"
-                }
-            })
+        prompt_enviado = prompt
+        if texto_pdf.strip():
+            prompt_enviado += f"\n\n--- TEXTO EXTRAÍDO DO DOCUMENTO PARA FACILITAR A LEITURA ---\n{texto_pdf}"
 
+        print(f"[DEBUG OPENROUTER] Instanciando cliente AsyncOpenAI (base_url={base_url})...")
         cliente = AsyncOpenAI(
             api_key=self.api_key,
             base_url=base_url,
-            default_headers=headers_extra
+            default_headers=headers_extra,
+            timeout=15.0  # Limite máximo absoluto (evita 300s de delay do cliente HTTP)
         )
-
+        
         erros_observados = []
-        print(f"\n[OpenRouter] Modelos de visão detectados ({len(modelos_tentativa)}): {modelos_tentativa}")
-        print("[OpenRouter] Aviso: Alguns modelos gratuitos podem estar fora do ar e gerar erro. O sistema tentará o próximo automaticamente. Por favor, aguarde e não cancele...")
+        print(f"\n[OpenRouter] Modelos detectados para tentativa ({len(modelos_tentativa)}): {modelos_tentativa}")
+        print("[OpenRouter] Aviso: Alguns modelos gratuitos podem estar fora do ar. O sistema tentará o próximo automaticamente...")
+
+        # Se conseguimos extrair texto, usaremos apenas texto para evitar que modelos não-visuais retornem erro 404/400.
+        tem_texto_extraido = bool(texto_pdf.strip() and len(texto_pdf) > 50)
 
         for modelo_atual in modelos_tentativa:
-            print(f"[OpenRouter] Tentando modelo: '{modelo_atual}'...")
+            print(f"[DEBUG OPENROUTER] Disparando request para modelo: '{modelo_atual}'... (Timeout 60s)")
+            import time
+            t0 = time.time()
+            
+            # Prepara o payload para o modelo atual
+            req_atual = [{"type": "text", "text": prompt_enviado}]
+            
+            # Como todos os modelos selecionados agora são multimodais (visão),
+            # nós SEMPRE enviamos a imagem convertida em Base64 para garantir o OCR nativo deles!
+            for imagem_bytes in lista_imagens:
+                base64_imagem = base64.b64encode(imagem_bytes).decode("utf-8")
+                req_atual.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_imagem}"
+                    }
+                })
+
             try:
                 resposta = await cliente.chat.completions.create(
                     model=modelo_atual,
                     messages=[
-                        {"role": "user", "content": conteudo_requisicao}
+                        {"role": "user", "content": req_atual}
                     ],
                     temperature=0.1,
-                    timeout=35.0  # Limita a espera em 35s por modelo para não travar a fila do cliente
+                    timeout=60.0  # Limita a espera em 60s
                 )
-
-                texto_resposta = resposta.choices[0].message.content
+                print(f"[DEBUG OPENROUTER] Resposta recebida em {time.time() - t0:.2f}s do modelo '{modelo_atual}'")
+                if not getattr(resposta, "choices", None):
+                    raise ValueError(f"Resposta inválida ou vazia do modelo. Corpo: {resposta}")
+                    
+                texto_resposta = resposta.choices[0].message.content or ""
+                print(f"[DEBUG OPENROUTER] Texto da resposta recebida (Tamanho: {len(texto_resposta)} caracteres):\n{texto_resposta[:300]}...")
+                
+                print(f"[DEBUG OPENROUTER] Iniciando parse JSON da resposta...")
                 dados_dict = self._limpar_e_converter_json(texto_resposta)
-                print(f"[OpenRouter] Sucesso com o modelo: '{modelo_atual}'")
+                print(f"[DEBUG OPENROUTER] Parse concluído com sucesso!")
                 return DadosDANFE(**dados_dict)
 
             except Exception as erro:
-                print(f"[OpenRouter] Falha/Timeout no modelo '{modelo_atual}': {str(erro)}")
+                print(f"[DEBUG OPENROUTER] Falha/Timeout no modelo '{modelo_atual}' após {time.time() - t0:.2f}s: {str(erro)}")
+                import traceback
+                traceback.print_exc()
                 erros_observados.append(f"[{modelo_atual}]: {str(erro)}")
                 continue
 

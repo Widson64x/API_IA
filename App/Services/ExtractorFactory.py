@@ -11,6 +11,7 @@ from App.Services.OpenAIExtractorService import ExtratorOpenAI
 from App.Services.ClaudeExtractorService import ExtratorClaude
 from App.Services.OpenRouterExtractorService import ExtratorOpenRouter
 from App.Services.GroqExtractorService import ExtratorGroq
+from App.Services.MistralExtractorService import ExtratorMistral
 
 
 class ExtratorFabrica:
@@ -22,6 +23,8 @@ class ExtratorFabrica:
         "claude": ExtratorClaude,
         "openrouter": ExtratorOpenRouter,
         "groq": ExtratorGroq,
+        "mistral": ExtratorMistral,
+        "pixtral": ExtratorMistral,
     }
 
     @classmethod
@@ -49,7 +52,7 @@ class ExtratorFabrica:
 
         # Passa o nome específico se o provedor exigir customização
         if issubclass(classe_extrator, ExtratorGemini):
-            return classe_extrator(nome_modelo="gemini-1.5-flash")
+            return classe_extrator(nome_modelo="gemini-2.0-flash")
         elif issubclass(classe_extrator, ExtratorOpenAI):
             return classe_extrator(nome_modelo="gpt-4o-mini")
         elif issubclass(classe_extrator, ExtratorClaude):
@@ -57,6 +60,8 @@ class ExtratorFabrica:
         elif issubclass(classe_extrator, ExtratorOpenRouter):
             return classe_extrator(nome_modelo="openrouter")
         elif issubclass(classe_extrator, ExtratorGroq):
-            return classe_extrator(nome_modelo="qwen/qwen3.6-27b")
+            return classe_extrator(nome_modelo="llama-3.3-70b-versatile")
+        elif issubclass(classe_extrator, ExtratorMistral):
+            return classe_extrator(nome_modelo="pixtral-12b-2409")
 
         return classe_extrator()

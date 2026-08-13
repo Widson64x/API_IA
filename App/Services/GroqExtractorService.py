@@ -47,45 +47,83 @@ class ExtratorGroq(DANFEExtratorBase):
         prompt = self._obter_prompt_instrucao()
         extensao = nome_arquivo.lower().split(".")[-1]
 
-        # Converte PDF em imagens JPEG ou otimiza (resolução reduzida para caber no limite do plano Groq)
+        texto_pdf = ""
         if extensao == "pdf":
-            lista_imagens = self._converter_pdf_para_imagens(conteudo_arquivo, dpi=72)
-        else:
-            lista_imagens = [self._otimizar_imagem_bytes(conteudo_arquivo, max_dimensao=800)]
+            try:
+                import pymupdf
+                documento_pdf = pymupdf.open(stream=conteudo_arquivo, filetype="pdf")
+                for pagina in documento_pdf:
+                    texto_pdf += pagina.get_text() + "\n"
+                documento_pdf.close()
+            except Exception as e:
+                print(f"[DEBUG GROQ] Falha ao extrair texto do PDF: {e}")
 
-        conteudo_requisicao = [{"type": "text", "text": prompt}]
+        # Se temos texto extraído com qualidade (sem caracteres corrompidos), usamos o LLaMA 3.3 70B Versatile
+        tem_texto_limpo = bool(texto_pdf.strip() and len(texto_pdf) > 50 and "PÀGT" not in texto_pdf)
 
-        for imagem_bytes in lista_imagens:
-            # Reotimiza cada imagem do PDF para garantir tamanho mínimo
-            imagem_otimizada = self._otimizar_imagem_bytes(imagem_bytes, max_dimensao=800)
-            base64_imagem = base64.b64encode(imagem_otimizada).decode("utf-8")
-            conteudo_requisicao.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_imagem}"
-                }
-            })
+        modelos_tentativa = []
+        if tem_texto_limpo:
+            modelos_tentativa.append("llama-3.3-70b-versatile")
+        
+        # Modelo de visão da Groq (suporta imagem)
+        modelos_tentativa.extend(["llama-3.2-11b-vision-preview", "llama-3.3-70b-versatile"])
 
-        # Utiliza o cliente OpenAI apontando para a URL da Groq
+        # Remove duplicados mantendo a ordem
+        modelos_unicos = []
+        for m in modelos_tentativa:
+            if m not in modelos_unicos:
+                modelos_unicos.append(m)
+
         cliente = AsyncOpenAI(
             api_key=self.api_key,
             base_url="https://api.groq.com/openai/v1"
         )
 
-        try:
-            resposta = await cliente.chat.completions.create(
-                model=self.nome_modelo,
-                messages=[
-                    {"role": "user", "content": conteudo_requisicao}
-                ],
-                temperature=0.1,
-                max_tokens=16384,
-                extra_body={"reasoning_format": "hidden"}
-            )
+        erros = []
+        for modelo_atual in modelos_unicos:
+            print(f"[DEBUG GROQ] Disparando requisição no modelo '{modelo_atual}'...")
             
-            texto_resposta = resposta.choices[0].message.content
-            dados_dict = self._limpar_e_converter_json(texto_resposta)
-            return DadosDANFE(**dados_dict)
+            prompt_final = prompt
+            if tem_texto_limpo:
+                prompt_final += f"\n\n--- TEXTO DO DOCUMENTO ---\n{texto_pdf}"
 
-        except Exception as erro:
-            raise ValueError(f"Falha ao extrair dados via Groq: {str(erro)}")
+            conteudo_requisicao = [{"type": "text", "text": prompt_final}]
+
+            # Só envia imagem se o modelo for de visão
+            if "vision" in modelo_atual:
+                if extensao == "pdf":
+                    lista_imagens = self._converter_pdf_para_imagens(conteudo_arquivo, dpi=72)
+                else:
+                    lista_imagens = [self._otimizar_imagem_bytes(conteudo_arquivo, max_dimensao=800)]
+
+                for imagem_bytes in lista_imagens:
+                    imagem_otimizada = self._otimizar_imagem_bytes(imagem_bytes, max_dimensao=800)
+                    base64_imagem = base64.b64encode(imagem_otimizada).decode("utf-8")
+                    conteudo_requisicao.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_imagem}"
+                        }
+                    })
+
+            try:
+                resposta = await cliente.chat.completions.create(
+                    model=modelo_atual,
+                    messages=[
+                        {"role": "user", "content": conteudo_requisicao}
+                    ],
+                    temperature=0.1,
+                    max_tokens=4096
+                )
+                
+                texto_resposta = resposta.choices[0].message.content or ""
+                dados_dict = self._limpar_e_converter_json(texto_resposta)
+                print(f"[DEBUG GROQ] Sucesso no modelo '{modelo_atual}'!")
+                return DadosDANFE(**dados_dict)
+
+            except Exception as erro:
+                print(f"[DEBUG GROQ] Erro no modelo '{modelo_atual}': {erro}")
+                erros.append(f"[{modelo_atual}]: {str(erro)}")
+                continue
+
+        raise ValueError(f"Falha ao extrair dados via Groq: {' | '.join(erros)}")

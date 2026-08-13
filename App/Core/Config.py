@@ -40,6 +40,7 @@ class ConfiguracaoAplicacao(BaseSettings):
     DEEPSEEK_API_KEY: Optional[str] = None
     OPENROUTER_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
+    MISTRAL_API_KEY: Optional[str] = None
 
     # Seguranca e Autenticacao JWT
     SECRET_KEY: str = "TROQUE_ESTA_CHAVE_EM_PRODUCAO"

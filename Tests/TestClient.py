@@ -170,7 +170,7 @@ def executar_cli():
     parser = argparse.ArgumentParser(description="Cliente de teste para a API de Extração de DANFE.")
     parser.add_argument("--arquivo", "-f", type=str, help="Caminho de um arquivo de DANFE avulso para teste.")
     parser.add_argument("--pasta", "-d", type=str, default=pasta_input_padrao, help="Caminho da pasta contendo múltiplos arquivos de DANFE (Padrão: Data/input).")
-    parser.add_argument("--modelo", "-m", type=str, default="gemini-flash", help="Modelo de IA (gemini-flash, gpt-4o-mini, claude-3-5-sonnet, deepseek-chat, openrouter-free).")
+    parser.add_argument("--modelo", "-m", type=str, default="gemini", help="Modelo de IA (gemini, openai, claude, openrouter, groq).")
     parser.add_argument("--url", "-u", type=str, default="http://localhost:8000", help="URL base da API FastAPI.")
 
     args = parser.parse_args()

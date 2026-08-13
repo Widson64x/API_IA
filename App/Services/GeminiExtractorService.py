@@ -44,7 +44,7 @@ class ExtratorGemini(DANFEExtratorBase):
         extensao = nome_arquivo.lower().split(".")[-1]
         mime_type = "application/pdf" if extensao == "pdf" else f"image/{extensao if extensao != 'jpg' else 'jpeg'}"
 
-        modelos_tentativa = [self.nome_modelo, "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-2.0-flash", "gemini-2.5-flash"]
+        modelos_tentativa = [self.nome_modelo, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"]
         modelos_unicos = []
         for m in modelos_tentativa:
             if m not in modelos_unicos:

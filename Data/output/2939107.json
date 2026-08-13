@@ -7,8 +7,8 @@
   "notaFiscalList": [
     {
       "Remetente": {
-        "nome": "SC DISTRIBUIÇÃO LTDA",
-        "cnpj": "01206820001500",
+        "nome": "SC DISTRIBUICAO LTDA",
+        "cnpj": "06626253000140",
         "cep": "75132400",
         "endereco": "ROD BR 153, 3621 - FAZENDA BARREIRO DO MEIO",
         "cidade": "ANAPOLIS",
@@ -17,10 +17,10 @@
         "numero": "3621"
       },
       "Destinatario": {
-        "nome": "RANBAXY FARMACÊUTICA LTDA",
+        "nome": "RANBAXY FARMACEUTICA LTDA",
         "cnpj": "73663650000433",
         "cep": "21010410",
-        "endereco": "R FRANCISCO DE SOUZA MELO 252",
+        "endereco": "R FRANCISCO DE SOUZA MELO",
         "cidade": "RIO DE JANEIRO",
         "uf": "RJ",
         "bairro": "CORDOVIL",
@@ -31,7 +31,7 @@
         "serie": "",
         "data": "2024-04-11",
         "peso": 0.05,
-        "volume": 0.0,
+        "volume": 1.0,
         "valor": 210.54
       },
       "NFD": {

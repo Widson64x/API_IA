@@ -31,7 +31,8 @@ EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
 async def extrair_danfe(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
-    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek)")
+    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek)"),
+    cliente: DadosCliente = Depends(aplicar_rate_limit)
 ) -> RespostaExtracaoDANFE:
     """Endpoint HTTP para recebimento e processamento de documentos DANFE.
 
@@ -101,12 +102,12 @@ async def extrair_danfe(
         )
 
         # Agenda o registro de consumo em background para nao atrasar a resposta
-        # background_tasks.add_task(
-        #    registrar_consumo,
-        #    cliente_id=cliente.cliente_id,
-        #    rota="/api/v1/danfe/extrair",
-        #    modelo_ia=modelo_ia
-        # )
+        background_tasks.add_task(
+           registrar_consumo,
+           cliente_id=cliente.cliente_id,
+           rota="/api/v1/danfe/extrair",
+           modelo_ia=modelo_ia
+        )
 
         return RespostaExtracaoDANFE(
             sucesso=True,

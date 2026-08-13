@@ -33,6 +33,7 @@ app = FastAPI(
     version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    root_path=configuracao.ROOT_PATH_FORMATTED,
     lifespan=lifespan
 )
 
@@ -60,12 +61,14 @@ def verificar_status_api() -> dict:
     Returns:
         dict: Informacoes de status e mensagem de boas-vindas.
     """
+    subrota = configuracao.ROOT_PATH_FORMATTED
     return {
         "status": "online",
         "aplicacao": "API de Extracao de DANFE",
         "versao": "1.1.0",
-        "documentacao": "/docs",
-        "autenticacao": "JWT via /api/v1/auth/token"
+        "subrota": subrota if subrota else "/",
+        "documentacao": f"{subrota}/docs",
+        "autenticacao": f"JWT via {subrota}/api/v1/auth/token"
     }
 
 

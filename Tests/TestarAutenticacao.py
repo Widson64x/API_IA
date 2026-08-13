@@ -133,8 +133,18 @@ def executar_testes_autenticacao() -> bool:
     else:
         print(f"ALERTA: Esperado 401 para token revogado, recebido {resp_rejeitada.status_code}.")
 
-    # 8. Teste Desativar Cliente (DELETE /api/v1/admin/clientes/{id})
-    print(f"\n[8/8] Testando DELETE /api/v1/admin/clientes/{cliente_id}...")
+    # 8. Teste Protecao de Autenticacao no Extrair (POST /api/v1/danfe/extrair sem token)
+    print("\n[8/9] Testando POST /api/v1/danfe/extrair sem autenticacao...")
+    resp_danfe_sem_auth = cliente_teste.post("/api/v1/danfe/extrair")
+    if resp_danfe_sem_auth.status_code in (401, 403):
+        print(f"OK: Endpoint /api/v1/danfe/extrair bloqueado sem token (HTTP {resp_danfe_sem_auth.status_code}).")
+        sucessos += 1
+    else:
+        print(f"FALHA: Endpoint /api/v1/danfe/extrair permitiu acesso sem token! (Status {resp_danfe_sem_auth.status_code})")
+        falhas += 1
+
+    # 9. Teste Desativar Cliente (DELETE /api/v1/admin/clientes/{id})
+    print(f"\n[9/9] Testando DELETE /api/v1/admin/clientes/{cliente_id}...")
     resp = cliente_teste.delete(f"/api/v1/admin/clientes/{cliente_id}", headers=headers_admin)
     if resp.status_code == 200 and resp.json().get("desativado") is True:
         print("OK: Cliente desativado com sucesso.")

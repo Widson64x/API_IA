@@ -33,6 +33,7 @@ class ConfiguracaoAplicacao(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DEBUG: bool = True
+    ROOT_PATH: str = ""
 
     GEMINI_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
@@ -58,6 +59,16 @@ class ConfiguracaoAplicacao(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @property
+    def ROOT_PATH_FORMATTED(self) -> str:
+        """Retorna o ROOT_PATH formatado garantindo a barra inicial (ex: '/api-ia') ou string vazia se raiz."""
+        if not self.ROOT_PATH or not self.ROOT_PATH.strip():
+            return ""
+        path_limpo = self.ROOT_PATH.strip()
+        if not path_limpo.startswith("/"):
+            path_limpo = f"/{path_limpo}"
+        return path_limpo.rstrip("/")
 
     def model_post_init(self, __context) -> None:
         """Garante que os diretorios de entrada e saida existam."""

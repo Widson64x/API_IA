@@ -75,7 +75,7 @@ Conteúdo do `.env`:
 HOST=0.0.0.0
 PORT=8000
 DEBUG=True
-DB_URL=sqlite:///Data/IDocs.db
+ROOT_PATH=/api-ia  # Subrota para Nginx (ex: http://b2bi-apps.luftfarma.com.br/api-ia)
 
 # Seguranca (gere utilizando Scripts/GerarChaves.py)
 SECRET_KEY=sua_chave_jwt_aqui
@@ -91,7 +91,7 @@ OPENROUTER_API_KEY=sua_chave_openrouter_aqui
 
 ---
 
-## Execução da API
+## Execução e Proxy Reverso (Nginx)
 
 Para iniciar o servidor HTTP:
 
@@ -99,8 +99,10 @@ Para iniciar o servidor HTTP:
 python -m App.Main
 ```
 
-Acesse a documentação interativa Swagger UI em:
-`http://localhost:8000/docs`
+Acesse a documentação interativa Swagger UI local em `http://localhost:8000/docs` ou via subrota `http://localhost:8000/api-ia/docs`.
+
+👉 **Para instruções completas de deploy atrás do Nginx com subrotas:**
+Leia o **[Guia de Configuração do Nginx](Docs/NGINX_CONFIG.md)**.
 
 ---
 

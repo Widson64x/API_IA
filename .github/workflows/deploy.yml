@@ -1,0 +1,125 @@
+name: Deploy API IA
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: runner-api-ia
+
+    steps:
+    - name: Baixar código (Runner)
+      uses: actions/checkout@v4
+
+    - name: Atualizar Aplicação no Servidor
+      shell: powershell
+      env:
+        COMMIT_MSG: ${{ github.event.head_commit.message }}
+        COMMIT_AUTHOR: ${{ github.actor }}
+        PYTHONUTF8: "1"
+        PYTHONIOENCODING: "utf-8"
+      run: |
+        # --- CONFIGURAÇÕES ---
+        $ServiceName = "Luft-API-IA"
+        $AppPath = "C:\ProjetosPython\API_IA"
+        $LogFile = "C:\GitHubRunners\API_IA\deploy-log.txt"
+        $NssmExe = "C:\nssm-2.24\win64\nssm.exe"
+        
+        # Garante que a pasta de log existe
+        $LogDir = Split-Path -Path $LogFile
+        if (-not (Test-Path $LogDir)) { 
+            New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
+        }
+
+        # Inicia Log
+        Start-Transcript -Path $LogFile -Append
+        Write-Host "--- DEPLOY INICIADO: $(Get-Date) por $env:COMMIT_AUTHOR ---"
+        Write-Host "Msg: $env:COMMIT_MSG"
+        
+        # Configura a quebra da execução em caso de erros
+        $ErrorActionPreference = "Stop"
+
+        # -----------------------------------------------------------
+        # 1. PARAR SERVIÇO (COM SEGURANÇA)
+        # -----------------------------------------------------------
+        Write-Host "1. Verificando estado do serviço $ServiceName..."
+        
+        $ServiceObj = Get-Service $ServiceName -ErrorAction SilentlyContinue
+        
+        if ($ServiceObj -and $ServiceObj.Status -eq 'Running') {
+            Write-Host "Status atual: RODANDO. Tentando parar..."
+            try {
+                # Executa o stop e ignora erros caso ele pare muito rápido
+                cmd /c "$NssmExe stop $ServiceName" 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+            } catch {
+                Write-Warning "Aviso ao tentar parar: $_"
+            }
+        } else {
+            Write-Host "O serviço já está PARADO ou não existe. Seguindo..."
+        }
+
+        # -----------------------------------------------------------
+        # 2. ATUALIZAR ARQUIVOS (COPIAR DO RUNNER -> PASTA DE DESTINO)
+        # -----------------------------------------------------------
+        Write-Host "2. Copiando arquivos para $AppPath..."
+        
+        # Cria a pasta de destino se não existir
+        if (-not (Test-Path $AppPath)) { 
+            New-Item -Path $AppPath -ItemType Directory -Force 
+        }
+
+        # Copia os arquivos baixados pelo checkout para a pasta de produção
+        # Excluímos .git e .venv para não quebrar configurações locais
+        Copy-Item -Path ".\*" -Destination $AppPath -Recurse -Force -Exclude ".git",".venv"
+        
+        Write-Host "Arquivos copiados com sucesso."
+
+        # -----------------------------------------------------------
+        # 3. ATUALIZAR DEPENDÊNCIAS
+        # -----------------------------------------------------------
+        Write-Host "3. Verificando dependências..."
+        
+        # Entra na pasta do projeto
+        Set-Location $AppPath
+
+        # Suspende temporariamente a parada por erro para evitar que warnings nativos quebrem o pipeline
+        $ErrorActionPreference = "Continue"
+
+        if (Test-Path ".venv") {
+            # O 2>&1 dentro das aspas obriga o cmd a fundir o fluxo de erro no fluxo de saída padrão
+            cmd /c ".venv\Scripts\python.exe -m pip install -r requirements.txt 2>&1"
+        } else {
+            Write-Warning "Criando venv..."
+            cmd /c "python -m venv .venv"
+            cmd /c ".venv\Scripts\python.exe -m pip install -r requirements.txt 2>&1"
+        }
+
+        # Restaura a política estrita de erros para o restante do script
+        $ErrorActionPreference = "Stop"
+
+        # -----------------------------------------------------------
+        # 4. INICIAR SERVIÇO
+        # -----------------------------------------------------------
+        Write-Host "4. Iniciando serviço $ServiceName..."
+        
+        # Tenta iniciar
+        try {
+             cmd /c "$NssmExe start $ServiceName" 2>&1 | Out-Null
+        } catch {
+             Write-Warning "Tentativa de start retornou erro (pode já estar rodando)."
+        }
+        
+        Start-Sleep -Seconds 5
+        
+        $ServiceStatus = Get-Service $ServiceName -ErrorAction SilentlyContinue
+        if ($ServiceStatus -and $ServiceStatus.Status -eq 'Running') {
+            Write-Host "SUCESSO: Serviço iniciado e rodando!"
+        } else {
+            Write-Error "FALHA CRÍTICA: O serviço não subiu. Verifique o log em C:\GitHubRunners\API_IA (logs do app)."
+            Stop-Transcript; exit 1
+        }
+
+        Write-Host "--- DEPLOY FINALIZADO ---"
+        Stop-Transcript

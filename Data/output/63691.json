@@ -1,0 +1,48 @@
+{
+  "arquivo": "DACTE",
+  "extensao": "pdf",
+  "tamanho": "",
+  "data_criacao": "2026-07-15T15:02:11",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "MOKSHA8 BRASIL INDUSTRIA C M LTDA",
+        "cnpj": "07591326000422",
+        "cep": "88316003",
+        "endereco": "ROD ANTONIO HEIL, 4999",
+        "cidade": "ITAJAI",
+        "uf": "SC",
+        "bairro": "",
+        "numero": "4999"
+      },
+      "Destinatario": {
+        "nome": "EMPREENDIMENTOS PAGUE MENOS S/A",
+        "cnpj": "06626253063315",
+        "cep": "54355057",
+        "endereco": "RODOVIA BR 101, SUL, KM 80,55",
+        "cidade": "JABOATAO DOS GUARARAPES",
+        "uf": "PE",
+        "bairro": "JARDIM JORDAO",
+        "numero": "80,55"
+      },
+      "NFO": {
+        "numero": "00068148",
+        "serie": "",
+        "data": "2026-07-14",
+        "peso": 4.08,
+        "volume": 5.0,
+        "valor": 1505.65
+      },
+      "NFD": {
+        "numero": "63691",
+        "serie": "2",
+        "data": "2026-08-07",
+        "peso": 0.0,
+        "volume": 0.0,
+        "valor": 2094.37
+      },
+      "pedido": ""
+    }
+  ]
+}

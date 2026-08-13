@@ -8,7 +8,7 @@ async def main():
     extrator = ExtratorOpenRouter()
     
     # Lendo o modelo de PDF
-    caminho_pdf = "Data/Model/63691.PDF"
+    caminho_pdf = "Data/input/63691.PDF"
     try:
         with open(caminho_pdf, "rb") as f:
             conteudo = f.read()

@@ -1,0 +1,48 @@
+{
+  "arquivo": "CT-E",
+  "extensao": "CT-E",
+  "tamanho": "1",
+  "data_criacao": "2026-07-07",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "MOKSHAB BRASIL INDUSTRIA C M LTDA",
+        "cnpj": "07591326000422",
+        "cep": "88316003",
+        "endereco": "ROD ANTONIO HEIL, 4999 - ITAJAI",
+        "cidade": "ITAJAI",
+        "uf": "SC",
+        "bairro": "",
+        "numero": ""
+      },
+      "Destinatario": {
+        "nome": "EMPREENDIMENTOS PAGUE MENOS SA",
+        "cnpj": "8132555511",
+        "cep": "54355057",
+        "endereco": "RUA RIACHO, Nº 807 GP B - MURIBECA - JABOATAO DOS GUIARAPAPES - PE",
+        "cidade": "MURIBECA",
+        "uf": "PE",
+        "bairro": "",
+        "numero": ""
+      },
+      "NFO": {
+        "numero": "63691",
+        "serie": "2",
+        "data": "2026-07-07",
+        "peso": 0.0,
+        "volume": 0.0,
+        "valor": 2.09437
+      },
+      "NFD": {
+        "numero": "",
+        "serie": "",
+        "data": "",
+        "peso": 0.0,
+        "volume": 0.0,
+        "valor": 0.0
+      },
+      "pedido": ""
+    }
+  ]
+}

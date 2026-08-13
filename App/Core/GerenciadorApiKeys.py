@@ -148,3 +148,66 @@ def revogar_cliente(cliente_id: str) -> bool:
         conexao.commit()
 
     return True
+
+
+def redefinir_api_key(cliente_id: str) -> Optional[dict]:
+    """Gera uma nova API Key em texto plano para um cliente e atualiza seu hash bcrypt.
+
+    Se o cliente estiver inativo, ele será reativado automaticamente.
+
+    Args:
+        cliente_id (str): Identificador único do cliente.
+
+    Returns:
+        Optional[dict]: Dados do cliente com a nova API Key em texto plano ou None se não encontrado.
+    """
+    api_key_texto_plano = f"idocs_{secrets.token_hex(24)}"
+    hash_api_key = gerar_hash_api_key(api_key_texto_plano)
+    agora = datetime.now(timezone.utc).isoformat()
+
+    with obter_conexao() as conexao:
+        cursor = conexao.cursor()
+        cursor.execute("SELECT cliente_id, nome, descricao FROM clientes WHERE cliente_id = ?", (cliente_id,))
+        cliente = cursor.fetchone()
+
+        if not cliente:
+            return None
+
+        cursor.execute(
+            """
+            UPDATE clientes
+            SET hash_api_key = ?, ativo = 1, ultimo_acesso = ?
+            WHERE cliente_id = ?
+            """,
+            (hash_api_key, agora, cliente_id)
+        )
+        conexao.commit()
+
+        return {
+            "cliente_id": cliente["cliente_id"],
+            "nome": cliente["nome"],
+            "descricao": cliente["descricao"],
+            "api_key": api_key_texto_plano,
+            "redefinido_em": agora
+        }
+
+
+def excluir_cliente(cliente_id: str) -> bool:
+    """Exclui permanentemente um cliente do banco de dados.
+
+    Args:
+        cliente_id (str): Identificador único do cliente.
+
+    Returns:
+        bool: True se o cliente foi excluído com sucesso, False se não foi encontrado.
+    """
+    with obter_conexao() as conexao:
+        cursor = conexao.cursor()
+        cursor.execute("SELECT 1 FROM clientes WHERE cliente_id = ?", (cliente_id,))
+        if not cursor.fetchone():
+            return False
+
+        cursor.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
+        conexao.commit()
+
+    return True

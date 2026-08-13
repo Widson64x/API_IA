@@ -34,18 +34,18 @@ class DANFEExtratorBase(ABC):
         """
         pass
 
-    def _converter_pdf_para_imagens(self, conteudo_pdf: bytes, dpi: int = 140) -> List[bytes]:
+    def _converter_pdf_para_imagens(self, conteudo_pdf: bytes, dpi: int = 160) -> List[bytes]:
         """Converte as páginas de um arquivo PDF em uma lista de imagens JPEG compactadas.
 
-        Utiliza a biblioteca PyMuPDF (pymupdf) configurada para gerar arquivos JPEG otimizados,
-        reduzindo em até 95% o tamanho do payload enviado aos modelos de IA.
+        Cada página é renderizada e enviada como uma imagem individual para preservar
+        a máxima resolução e legibilidade de OCR de dados detalhados (CEPs, Nomes, Números).
 
         Args:
             conteudo_pdf (bytes): Conteúdo binário do PDF.
-            dpi (int): Resolução da imagem convertida (padrão: 140 DPI para balanço ideal velocidade/OCR).
+            dpi (int): Resolução da imagem renderizada (padrão: 160 DPI).
 
         Returns:
-            List[bytes]: Lista contendo os bytes das imagens JPEG renderizadas de cada página.
+            List[bytes]: Lista de bytes JPEG onde cada elemento corresponde a uma página do PDF.
         """
         from PIL import Image
         import io
@@ -53,37 +53,20 @@ class DANFEExtratorBase(ABC):
         imagens_bytes: List[bytes] = []
         documento_pdf = pymupdf.open(stream=conteudo_pdf, filetype="pdf")
 
-        paginas_pil = []
         for numero_pagina in range(len(documento_pdf)):
             pagina = documento_pdf.load_page(numero_pagina)
             zoom = dpi / 72
             matriz = pymupdf.Matrix(zoom, zoom)
             pixmap = pagina.get_pixmap(matrix=matriz, alpha=False)
             
-            img_pil = Image.open(io.BytesIO(pixmap.tobytes("jpeg", jpg_quality=85)))
-            paginas_pil.append(img_pil)
+            img_pil = Image.open(io.BytesIO(pixmap.tobytes("jpeg", jpg_quality=90)))
+            
+            buffer = io.BytesIO()
+            img_pil.save(buffer, format="JPEG", quality=90, optimize=True)
+            imagens_bytes.append(buffer.getvalue())
 
         documento_pdf.close()
-
-        if not paginas_pil:
-            return []
-
-        # Calcula a altura total e a largura maxima
-        largura_total = max(img.width for img in paginas_pil)
-        altura_total = sum(img.height for img in paginas_pil)
-
-        # Cria uma nova imagem combinada (fundo branco)
-        imagem_combinada = Image.new("RGB", (largura_total, altura_total), (255, 255, 255))
-        
-        y_offset = 0
-        for img in paginas_pil:
-            imagem_combinada.paste(img, (0, y_offset))
-            y_offset += img.height
-
-        # Salva a imagem combinada em bytes
-        buffer = io.BytesIO()
-        imagem_combinada.save(buffer, format="JPEG", quality=85)
-        return [buffer.getvalue()]
+        return imagens_bytes
 
     def _limpar_e_converter_json(self, texto_resposta: str) -> dict:
         """Remove marcadores de bloco de código Markdown (```json ... ```) e converte o texto para dict.
@@ -128,17 +111,28 @@ class DANFEExtratorBase(ABC):
             nfo = nota.get("NFO", {})
             nfd = nota.get("NFD", {})
 
-            # 1. Sanitização de CNPJ (manter apenas números)
-            if rem.get("cnpj"):
-                rem["cnpj"] = re.sub(r"\D", "", str(rem["cnpj"]))
-            if dest.get("cnpj"):
-                dest["cnpj"] = re.sub(r"\D", "", str(dest["cnpj"]))
+            # 1. Sanitização de CNPJ (manter apenas números e ignorar telefones capturados por engano)
+            for entidade in (rem, dest):
+                if entidade.get("cnpj"):
+                    cnpj_limpo = re.sub(r"\D", "", str(entidade["cnpj"]))
+                    # Se tiver 10 dígitos ou se não for um CNPJ/CPF com tamanho válido (14 ou 11 dígitos), limpa
+                    if len(cnpj_limpo) == 10:
+                        entidade["cnpj"] = ""
+                    else:
+                        entidade["cnpj"] = cnpj_limpo
 
             # 2. Impedir que Inscrições Estaduais ou códigos estranhos virem número de nota
             for bloco in (nfo, nfd):
                 num = str(bloco.get("numero", "")).strip()
                 if len(num) > 9:  # Número de DANFE/NF tem no máximo 9 dígitos
                     bloco["numero"] = ""
+
+            # 3. Em notas de Devolução/Retorno, se NFO e NFD tiverem exatamente o mesmo número, limpa NFO para evitar duplicação incorreta
+            pedido_str = str(nota.get("pedido", "")).upper()
+            num_nfo = str(nfo.get("numero", "")).strip()
+            num_nfd = str(nfd.get("numero", "")).strip()
+            if num_nfo and num_nfd and num_nfo == num_nfd and any(k in pedido_str for k in ["DEVOL", "RETORNO"]):
+                nfo["numero"] = ""
 
         return dados
 
@@ -175,7 +169,7 @@ class DANFEExtratorBase(ABC):
 
     def _obter_prompt_instrucao(self) -> str:
         """Retorna o prompt padronizado e compacto direcionando a IA para extrair as notas na nova estrutura universal."""
-        return """Examine este documento de Nota Fiscal (DANFE) ou DACTE.
+        return """Examine este documento, que pode ser uma Nota Fiscal (DANFE) ou um Conhecimento de Transporte (DACTE).
 Extraia os dados das notas e retorne APENAS um JSON no formato abaixo (sem markdown ou textos adicionais):
 
 Formato esperado:
@@ -183,16 +177,30 @@ Formato esperado:
 
 REGRAS ESTRITAS DE EXTRAÇÃO E CONFERÊNCIA:
 1. ENTIDADES (REMETENTE vs DESTINATÁRIO):
-   - REMETENTE (Emitente da DANFE): É quem está emitindo o documento no TOPO ESQUERDO (ex: "SC DISTRIBUICAO LTDA"). O CNPJ do Remetente é o "CNPJ" impresso no topo da DANFE (ex: 01.206.820/0015-00). CUIDADO PARA NÃO INVERTER O CNPJ DO REMETENTE COM O DO DESTINATÁRIO!
-   - DESTINATÁRIO: É a empresa descrita no quadro "DESTINATÁRIO / REMETENTE" (ex: "RANBAXY FARMACEUTICA LTDA"). O CNPJ do Destinatário está no campo "CNPJ/CPF" desse quadro (ex: 73.663.650/0004-33).
+   - Se for DANFE: REMETENTE é o Emitente (topo esquerdo). DESTINATÁRIO fica no quadro "DESTINATÁRIO / REMETENTE".
+   - Se for DACTE: Localize explicitamente os quadros "REMETENTE" e "DESTINATÁRIO". Preste atenção aos seus respectivos CNPJs e endereços. Não inverta os dados!
+   - EXTRAÇÃO OBRIGATÓRIA DE CNPJ DO REMETENTE E DESTINATÁRIO:
+     * Todo CNPJ possui obrigatoriamente 14 DÍGITOS NUMÉRICOS (ex: "06.626.253/0633-15" -> "06626253063315").
+     * ATENÇÃO CRÍTICA: NUNCA extraia o número de telefone (ex: "FONE 8132555511") no lugar do CNPJ! Procure obrigatoriamente o campo "CNPJ" impresso ao lado ou abaixo do emitente/destinatário.
+     * Tanto o Remetente quanto o Destinatário possuem CNPJ válido de 14 dígitos. Não deixe o CNPJ do Remetente em branco nem preencha com número de telefone!
 
 2. DIVISÃO DAS NOTAS (NFO vs NFD):
-   - A NOTA PRINCIPAL do documento impresso no TOPO/CABEÇALHO (quadro "Nº", ex: 2939107, série 2) deve ser colocada no bloco **NFO** (Nota Fiscal Original).
-   - A NOTA REFERENCIADA descrita no quadro "DADOS ADICIONAIS / INFORMAÇÕES COMPLEMENTARES" (ex: "Dev. Ref. NF(s). 000033759 de 11/04/2024") deve ser colocada no bloco **NFD** (Nota Fiscal de Devolução).
+   - ATENÇÃO: Identifique o tipo de documento e a NATUREZA DA OPERAÇÃO.
+   - SE FOR DANFE DE VENDA/SAÍDA NORMAL: O número impresso no topo (cabeçalho) vai para o bloco **NFO** (Nota Fiscal Originária). Se houver notas referenciadas em Informações Complementares, vão para **NFD**.
+   - SE FOR DANFE DE DEVOLUÇÃO / RETORNO (Natureza da operação contendo DEVOL, RETORNO, DEVOLUCAO, etc.):
+     * A nota gerada no topo (cabeçalho do DANFE, ex: Nº 63691) é a Nota Fiscal de Devolução -> insira no bloco **NFD**. A "DATA DA EMISSÃO" do topo do DANFE vai para NFD.data (formato YYYY-MM-DD).
+     * A NOTA FISCAL ORIGINAL QUE ESTÁ SENDO DEVOLVIDA fica localizada nos "DADOS ADICIONAIS / INFORMAÇÕES COMPLEMENTARES" ou no texto dos itens (ex: "NFO: 68148 EMISSÃO: 14/07/2026" ou "Nota: 68148 Data Emissao: 14/07/2026") -> insira no bloco **NFO** (numero: "68148", data: "2026-07-14")!
+     * NUNCA coloque o número da NFD como NFO quando for devolução e houver uma nota de origem indicada nos Dados Adicionais!
+   - SE FOR DACTE (Conhecimento de Transporte): O número no topo (cabeçalho) é o número do CT-e, NÃO é a NFO! A nota principal (NFO) em um DACTE deve ser encontrada nos quadros de "DOCUMENTOS ORIGINÁRIOS", "NOTAS FISCAIS" ou "INFORMAÇÕES DA NF-E". Insira os dados dessa nota no bloco **NFO** e, se houver devolução atrelada ao frete, no **NFD**.
 
 3. VALOR TOTAL E PESO:
-   - "valor": Use o campo "VALOR TOTAL DA NOTA" (ex: 73.10) do quadro CÁLCULO DO IMPOSTO. NUNCA use valor total dos produtos nem Inscrição Estadual.
-   - "peso" e "volume": Extraia do quadro TRANSPORTADOR/VOLUMES TRANSPORTADOS.
+   - "valor": Valor total financeiro da operação (do documento).
+   - "peso" e "volume": Extraia das informações de transporte/carga.
 
-4. DADOS NUMÉRICOS:
-   - CNPJ e CEP contêm APENAS DÍGITOS NÚMEROS. Formate o valor com ponto decimal."""
+4. DADOS NUMÉRICOS E DATAS:
+   - CNPJ e CEP contêm APENAS DÍGITOS NÚMEROS. Formate valores decimais com ponto (ex: 73.10).
+   - ATENÇÃO A DATAS: No Brasil, as datas nos documentos estão no formato brasileiro DD/MM/YYYY (Dia/Mês/Ano). Exemplo: "07/08/2026" significa 7 de Agosto de 2026, devendo ser convertida para "2026-08-07". Não confunda o dia com o mês!
+
+5. RAZÃO SOCIAL E CEP (PRECISÃO DE LEITURA):
+   - RAZÃO SOCIAL / NOME DAS EMPRESAS: Preste atenção extrema aos caracteres exatos do nome comercial da empresa (ex: "MOKSHA8 BRASIL INDUSTRIA C M LTDA"). Não invente palavras genéricas nem altere números por letras (ex: não confunda "MOKSHA8" com "MORAES" ou "MORCELAMENTO").
+   - CEP: O CEP possui obrigatoriamente 8 DÍGITOS NUMÉRICOS. Extraia com precisão os 8 dígitos do CEP constante no cabeçalho ou quadro de endereço (ex: "54355057", "88316003")."""

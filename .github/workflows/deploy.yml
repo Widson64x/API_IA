@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: runner-api-ia
+    runs-on: [self-hosted, Windows]
 
     steps:
     - name: Baixar código (Runner)

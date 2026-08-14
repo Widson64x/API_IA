@@ -75,3 +75,41 @@ def obter_metricas() -> dict:
             metricas[cid]["modelos"][modelo] = metricas[cid]["modelos"].get(modelo, 0) + qtd
             
     return metricas
+
+
+def obter_consumo_cliente(cliente_id: str) -> dict:
+    """Retorna o consolidado de consumo de um cliente específico lendo do SQLite.
+
+    Args:
+        cliente_id (str): Identificador único do cliente.
+
+    Returns:
+        dict: Dicionário contendo total de requisições, detalhamento por modelo e por rota.
+    """
+    consumo = {
+        "cliente_id": cliente_id,
+        "total_requisicoes": 0,
+        "rotas": {},
+        "modelos": {}
+    }
+
+    with obter_conexao() as conexao:
+        cursor = conexao.cursor()
+        cursor.execute(
+            "SELECT rota, modelo_ia, quantidade FROM metricas_consumo WHERE cliente_id = ?",
+            (cliente_id,)
+        )
+        linhas = cursor.fetchall()
+
+        for linha in linhas:
+            qtd = linha["quantidade"]
+            consumo["total_requisicoes"] += qtd
+
+            rota = linha["rota"]
+            consumo["rotas"][rota] = consumo["rotas"].get(rota, 0) + qtd
+
+            modelo = linha["modelo_ia"]
+            consumo["modelos"][modelo] = consumo["modelos"].get(modelo, 0) + qtd
+
+    return consumo
+

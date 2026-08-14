@@ -69,3 +69,43 @@ class RespostaExtracaoDANFE(BaseModel):
     mensagem: str = Field(..., description="Mensagem descritiva")
     dados: Optional[DadosDANFE] = Field(None, description="Dados estruturados extraídos")
     metadados: Optional[MetadadosProcessamento] = Field(None, description="Metadados técnicos")
+
+
+class InfoModeloIA(BaseModel):
+    """Informações e status de disponibilidade de um modelo de IA."""
+
+    id: str = Field(..., description="Identificador único a ser enviado no campo modelo_ia (ex: 'gemini')")
+    nome: str = Field(..., description="Nome de exibição do modelo (ex: 'Google Gemini 2.0 Flash')")
+    provedor: str = Field(..., description="Provedor do modelo (ex: 'Google', 'OpenAI', 'Anthropic')")
+    ativo: bool = Field(..., description="Indica se o modelo está ativo e pronto para uso")
+    descricao: str = Field(..., description="Descrição das capacidades do modelo")
+    suporta_imagem: bool = Field(True, description="Indica se o modelo suporta formatos de imagem (PNG, JPG, WEBP)")
+    suporta_pdf: bool = Field(True, description="Indica se o modelo processa arquivos PDF")
+    motivo_inativo: Optional[str] = Field(None, description="Explicação caso o modelo esteja inativo")
+
+
+class RespostaModelosDisponiveis(BaseModel):
+    """Resposta com a lista de modelos suportados e disponíveis na API."""
+
+    modelo_padrao: str = Field(..., description="Identificador do modelo sugerido por padrão")
+    total_modelos: int = Field(..., description="Total de modelos suportados")
+    total_ativos: int = Field(..., description="Total de modelos ativos no momento")
+    modelos: List[InfoModeloIA] = Field(..., description="Lista detalhada dos modelos")
+
+
+class ResumoConsumoPorModelo(BaseModel):
+    """Estatísticas de uso agrupadas por modelo de IA."""
+
+    modelo_ia: str = Field(..., description="Identificador do modelo de IA")
+    total_requisicoes: int = Field(0, description="Total de requisições realizadas neste modelo")
+
+
+class RespostaConsumoCliente(BaseModel):
+    """Resposta consolidada de consumo de recursos do cliente autenticado."""
+
+    cliente_id: str = Field(..., description="Identificador do cliente")
+    nome: str = Field(..., description="Nome do cliente")
+    total_requisicoes: int = Field(0, description="Total acumulado de requisições realizadas")
+    consumo_por_modelo: List[ResumoConsumoPorModelo] = Field(default_factory=list, description="Detalhamento por modelo de IA")
+    rotas: dict = Field(default_factory=dict, description="Detalhamento de requisições por rota")
+

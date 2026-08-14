@@ -203,4 +203,7 @@ REGRAS ESTRITAS DE EXTRAÇÃO E CONFERÊNCIA:
 
 5. RAZÃO SOCIAL E CEP (PRECISÃO DE LEITURA):
    - RAZÃO SOCIAL / NOME DAS EMPRESAS: Preste atenção extrema aos caracteres exatos do nome comercial da empresa (ex: "MOKSHA8 BRASIL INDUSTRIA C M LTDA"). Não invente palavras genéricas nem altere números por letras (ex: não confunda "MOKSHA8" com "MORAES" ou "MORCELAMENTO").
-   - CEP: O CEP possui obrigatoriamente 8 DÍGITOS NUMÉRICOS. Extraia com precisão os 8 dígitos do CEP constante no cabeçalho ou quadro de endereço (ex: "54355057", "88316003")."""
+   - CEP: O CEP possui obrigatoriamente 8 DÍGITOS NUMÉRICOS. Extraia com precisão os 8 dígitos do CEP constante no cabeçalho ou quadro de endereço (ex: "54355057", "88316003").
+
+6. DOCUMENTOS NÃO-FISCAIS, INVÁLIDOS OU EM BRANCO:
+   - Se o documento NÃO for uma Nota Fiscal (DANFE) ou Conhecimento de Transporte (DACTE) (ex: foto aleatória, folha em branco, texto não-fiscal ou ilegível), NUNCA invente dados fictícios. Retorne o JSON com "quantidade_nota": 0 e "notaFiscalList": []."""

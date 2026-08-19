@@ -9,7 +9,7 @@
       "Remetente": {
         "nome": "SC DISTRIBUICAO LTDA",
         "cnpj": "01206820001500",
-        "cep": "75.132-400",
+        "cep": "75132400",
         "endereco": "ROD BR 153, 3621 - FAZENDA BARREIRO DO MEIO",
         "cidade": "ANAPOLIS",
         "uf": "GO",
@@ -19,8 +19,8 @@
       "Destinatario": {
         "nome": "RANBAXY FARMACEUTICA LTDA",
         "cnpj": "73663650000433",
-        "cep": "21.010-410",
-        "endereco": "R FRANCISCO DE SOUZA MELO 252",
+        "cep": "21010410",
+        "endereco": "R FRANCISCO DE SOUZA MELO",
         "cidade": "RIO DE JANEIRO",
         "uf": "RJ",
         "bairro": "CORDOVIL",
@@ -28,11 +28,11 @@
       },
       "NFO": {
         "numero": "2940740",
-        "serie": "1",
+        "serie": "2",
         "data": "24/07/2026",
         "peso": 0.85,
         "volume": 1.0,
-        "valor": 3.34271
+        "valor": 1242.75
       },
       "NFD": {
         "numero": "000031615",
@@ -42,7 +42,7 @@
         "volume": 0.0,
         "valor": 0.0
       },
-      "pedido": ""
+      "pedido": "VENCIDO"
     }
   ]
 }

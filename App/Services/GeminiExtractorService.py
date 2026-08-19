@@ -80,6 +80,7 @@ class ExtratorGemini(DANFEExtratorBase):
                 )
                 texto_resposta = resposta.text
                 dados_dict = self._limpar_e_converter_json(texto_resposta)
+                dados_dict = self._preencher_metadados_arquivo(dados_dict, nome_arquivo, len(conteudo_arquivo))
                 return DadosDANFE(**dados_dict)
 
             except Exception as erro:

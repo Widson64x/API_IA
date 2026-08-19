@@ -142,6 +142,26 @@ class DANFEExtratorBase(ABC):
 
         return dados
 
+    def _preencher_metadados_arquivo(self, dados: dict, nome_arquivo: str, tamanho_bytes: int) -> dict:
+        """Preenche dinamicamente as informações do arquivo que não precisam passar por inferência da IA."""
+        import time
+        from pathlib import Path
+        
+        nome_p = Path(nome_arquivo)
+        extensao = nome_p.suffix.lower()
+        if not extensao and "." in nome_arquivo:
+            extensao = f".{nome_arquivo.split('.')[-1].lower()}"
+            
+        tamanho_kb = f"{tamanho_bytes / 1024:.2f} KB"
+        data_atual_formatada = time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        dados["arquivo"] = nome_p.stem
+        dados["extensao"] = extensao
+        dados["tamanho"] = tamanho_kb
+        dados["data_criacao"] = data_atual_formatada
+        
+        return dados
+
     def _otimizar_imagem_bytes(self, conteudo_imagem: bytes, max_dimensao: int = 1400) -> bytes:
         """Redimensiona e comprime imagens de alta resolução (ex: fotos de celular/WhatsApp)
         para garantir payload leve e evitar erros de Read Timeout na API.
@@ -179,7 +199,7 @@ class DANFEExtratorBase(ABC):
 Extraia os dados das notas e retorne APENAS um JSON no formato abaixo (sem markdown ou textos adicionais):
 
 Formato esperado:
-{"arquivo":"","extensao":"","tamanho":"","data_criacao":"","quantidade_nota":1,"notaFiscalList":[{"Remetente":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"Destinatario":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"NFO":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"NFD":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"pedido":""}]}
+{"notaFiscalList":[{"Remetente":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"Destinatario":{"nome":"","cnpj":"","cep":"","endereco":"","cidade":"","uf":"","bairro":"","numero":""},"NFO":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"NFD":{"numero":"","serie":"","data":"","peso":0.0,"volume":0.0,"valor":0.0},"pedido":""}]}
 
 REGRAS ESTRITAS DE EXTRAÇÃO E CONFERÊNCIA:
 1. ENTIDADES (REMETENTE vs DESTINATÁRIO):

@@ -106,6 +106,7 @@ class ExtratorMistral(DANFEExtratorBase):
             
             print(f"[DEBUG MISTRAL] Iniciando parse JSON da resposta...")
             dados_dict = self._limpar_e_converter_json(texto_resposta)
+            dados_dict = self._preencher_metadados_arquivo(dados_dict, nome_arquivo, len(conteudo_arquivo))
             print(f"[DEBUG MISTRAL] Parse concluído com sucesso!")
             
             return DadosDANFE(**dados_dict)

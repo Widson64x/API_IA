@@ -118,6 +118,7 @@ class ExtratorGroq(DANFEExtratorBase):
                 
                 texto_resposta = resposta.choices[0].message.content or ""
                 dados_dict = self._limpar_e_converter_json(texto_resposta)
+                dados_dict = self._preencher_metadados_arquivo(dados_dict, nome_arquivo, len(conteudo_arquivo))
                 print(f"[DEBUG GROQ] Sucesso no modelo '{modelo_atual}'!")
                 return DadosDANFE(**dados_dict)
 

@@ -15,8 +15,8 @@ A API protege a extração de dados através de credenciais granulares:
 3. **Controle de Abuso**: Implementação de `Rate Limiting` (60 requisições por minuto por padrão).
 4. **Segurança de Armazenamento**: Apenas o hash seguro (SHA-256 + Bcrypt) das chaves de API fica armazenado no banco de dados SQLite.
 
-Para instruções completas de como gerar tokens, utilizar as rotas e exemplos práticos prontos para uso em **C#**, **Python**, **JavaScript / Node.js**, **cURL** e **PHP**, leia a documentação dedicada:
-👉 **[Guia de Uso da API e Exemplos de Integração (C#, Python, JS, cURL, PHP)](Docs/GUIA_DE_USO_API.md)**
+Para instruções completas de como gerar tokens e utilizar as rotas como cliente ou administrador, leia a documentação dedicada:
+👉 **[Guia de Uso da API (Autenticação e Extração)](Docs/GUIA_DE_USO_API.md)**
 
 ---
 
@@ -75,7 +75,7 @@ Conteúdo do `.env`:
 HOST=0.0.0.0
 PORT=8000
 DEBUG=True
-ROOT_PATH=/api-ia  # Subrota para Nginx (ex: http://b2bi-apps.luftfarma.com.br/api-ia)
+DB_URL=sqlite:///Data/IDocs.db
 
 # Seguranca (gere utilizando Scripts/GerarChaves.py)
 SECRET_KEY=sua_chave_jwt_aqui
@@ -91,7 +91,7 @@ OPENROUTER_API_KEY=sua_chave_openrouter_aqui
 
 ---
 
-## Execução e Proxy Reverso (Nginx)
+## Execução da API
 
 Para iniciar o servidor HTTP:
 
@@ -99,10 +99,8 @@ Para iniciar o servidor HTTP:
 python -m App.Main
 ```
 
-Acesse a documentação interativa Swagger UI local em `http://localhost:8000/docs` ou via subrota `http://localhost:8000/api-ia/docs`.
-
-👉 **Para instruções completas de deploy atrás do Nginx com subrotas:**
-Leia o **[Guia de Configuração do Nginx](Docs/NGINX_CONFIG.md)**.
+Acesse a documentação interativa Swagger UI em:
+`http://localhost:8000/docs`
 
 ---
 

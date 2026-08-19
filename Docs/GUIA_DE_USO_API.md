@@ -87,7 +87,9 @@ Content-Type: application/json
 
 ### Passo 3.2: Consumir a API (Extração de DANFE)
 
-Agora que você possui o `access_token`, você deve enviá-lo no cabeçalho `Authorization` nas requisições para a API.
+Você pode enviar a DANFE tanto via **Upload de Arquivo (Multipart/Form-Data)** quanto via **Payload JSON com Base64**.
+
+#### Opção A: Upload de Arquivo (`/extrair`)
 
 **Endpoint**: `POST /api/v1/danfe/extrair`
 
@@ -99,7 +101,7 @@ Content-Type: multipart/form-data
 
 **Body (Form Data)**:
 - `file`: (Arquivo binário PDF ou Imagem da DANFE)
-- `modelo_ia`: `gemini-flash` (ou o modelo contratado)
+- `modelo_ia`: `gemini` (ou openai, claude, deepseek, mistral, groq, openrouter)
 
 **Exemplo em cURL**:
 ```bash
@@ -107,7 +109,40 @@ curl -X POST "http://localhost:8000/api/v1/danfe/extrair" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
   -H "Content-Type: multipart/form-data" \
   -F "file=@caminho/para/danfe.pdf" \
-  -F "modelo_ia=gemini-flash"
+  -F "modelo_ia=gemini"
+```
+
+#### Opção B: Envio em Base64 (`/extrair-b64`)
+
+**Endpoint**: `POST /api/v1/danfe/extrair-b64`
+
+**Headers**:
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1...
+Content-Type: application/json
+```
+
+**Body (JSON)**:
+```json
+{
+  "tipo_arquivo": "pdf",
+  "arquivo_b64": "JVBERi0xLjQKJcTl8uXr...",
+  "modelo_ia": "gemini",
+  "nome_arquivo": "63691.pdf"
+}
+```
+*(Obs: `tipo_arquivo` aceita `pdf`, `png`, `jpg`, `jpeg`, `webp`. O campo `arquivo_b64` aceita tanto a string b64 pura quanto data URLs do tipo `data:application/pdf;base64,...`)*
+
+**Exemplo em cURL**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/danfe/extrair-b64" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tipo_arquivo": "pdf",
+    "arquivo_b64": "JVBERi0xLjQKJcTl8uXr...",
+    "modelo_ia": "gemini"
+  }'
 ```
 
 ### Passo 3.3: Renovar o Token de Acesso (Refresh)

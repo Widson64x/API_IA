@@ -5,13 +5,14 @@ e orquestracao com os modelos de Inteligencia Artificial selecionados.
 Todos os endpoints sao protegidos por autenticacao JWT e rate limiting.
 """
 
+import base64
 import time
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 
 from App.Core.Dependencias import aplicar_rate_limit
 from App.Core.GerenciadorMetricas import registrar_consumo
 from App.Schemas.AuthSchema import DadosCliente
-from App.Schemas.DanfeSchema import MetadadosProcessamento, RespostaExtracaoDANFE
+from App.Schemas.DanfeSchema import MetadadosProcessamento, RequisicaoExtracaoB64, RespostaExtracaoDANFE
 from App.Core.Config import configuracao
 from App.Services.ExtractorFactory import ExtratorFabrica
 from pathlib import Path
@@ -21,39 +22,12 @@ roteador_danfe = APIRouter(prefix="/api/v1/danfe", tags=["DANFE Extrator"])
 EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
 
 
-@roteador_danfe.post(
-    "/extrair",
-    response_model=RespostaExtracaoDANFE,
-    status_code=status.HTTP_200_OK,
-    summary="Extrai dados estruturados de uma NF/DANFE",
-    description="Recebe um arquivo (PDF ou Imagem) e processa a extracao de dados da NF atraves do modelo de IA selecionado, salvando o resultado em JSON na pasta Data/output."
-)
-async def extrair_danfe(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
-    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek)")
+async def _processar_extracao(
+    conteudo_bytes: bytes,
+    nome_arquivo: str,
+    modelo_ia: str
 ) -> RespostaExtracaoDANFE:
-    """Endpoint HTTP para recebimento e processamento de documentos DANFE.
-
-    Requer autenticacao JWT via header 'Authorization: Bearer <token>'.
-    Rate limiting aplicado automaticamente por cliente.
-
-    Args:
-        background_tasks (BackgroundTasks): Injetor de tarefas em background do FastAPI.
-        file (UploadFile): Arquivo enviado pelo cliente no formulario multipart.
-        modelo_ia (str): Identificador do modelo de IA desejado. Padrao 'gemini-flash'.
-        cliente (DadosCliente): Dados do cliente autenticado (injetado via dependency).
-
-    Returns:
-        RespostaExtracaoDANFE: Resposta padronizada contendo sucesso, dados extraidos e metadados.
-
-    Raises:
-        HTTPException: Em caso de extensao invalida ou erro no processamento da IA.
-    """
-    nome_arquivo = file.filename or "documento_danfe.pdf"
-    print(f"\n[DEBUG ROUTER] Recebendo requisição para arquivo: {nome_arquivo}")
-    print(f"[DEBUG ROUTER] Modelo IA escolhido: {modelo_ia}")
-
+    """Função auxiliar interna para executar a extração via IA e persistir a saída."""
     extensao = nome_arquivo.lower().split(".")[-1]
 
     if extensao not in EXTENSOES_PERMITIDAS:
@@ -66,27 +40,24 @@ async def extrair_danfe(
     tempo_inicio = time.perf_counter()
 
     try:
-        conteudo_bytes = await file.read()
-        print(f"[DEBUG ROUTER] Arquivo lido. Tamanho: {len(conteudo_bytes)} bytes")
-        
-        # Obtem o extrator configurado para o modelo informado via Factory Pattern
         print(f"[DEBUG ROUTER] Instanciando extrator...")
         extrator = ExtratorFabrica.obter_extrator(modelo_ia)
         print(f"[DEBUG ROUTER] Extrator instanciado: {extrator.__class__.__name__}")
-        
-        # Realiza a extracao dos dados da DANFE
+
         print(f"[DEBUG ROUTER] Iniciando extração na classe do extrator...")
         dados_extraidos = await extrator.extrair_dados(
             conteudo_arquivo=conteudo_bytes,
             nome_arquivo=nome_arquivo
         )
-        print(f"[DEBUG ROUTER] Extração concluída. Salvando JSON...")
+        print(f"[DEBUG ROUTER] Extração concluída. Preenchendo metadados do arquivo...")
 
-        # Salva automaticamente o arquivo JSON formatado na pasta Data/output
+        # Preenchimento automático dos metadados foi movido para o ExtratorBase
+        nome_p = Path(nome_arquivo)
+
         configuracao.DIR_OUTPUT.mkdir(parents=True, exist_ok=True)
-        nome_base = Path(nome_arquivo).stem
+        nome_base = nome_p.stem
         caminho_json = configuracao.DIR_OUTPUT / f"{nome_base}.json"
-        
+
         with open(caminho_json, "w", encoding="utf-8") as file_json:
             file_json.write(dados_extraidos.model_dump_json(indent=2))
 
@@ -99,14 +70,6 @@ async def extrair_danfe(
             tempo_execucao_segundos=tempo_total,
             nome_arquivo_original=nome_arquivo
         )
-
-        # Agenda o registro de consumo em background para nao atrasar a resposta
-        # background_tasks.add_task(
-        #    registrar_consumo,
-        #    cliente_id=cliente.cliente_id,
-        #    rota="/api/v1/danfe/extrair",
-        #    modelo_ia=modelo_ia
-        # )
 
         return RespostaExtracaoDANFE(
             sucesso=True,
@@ -128,4 +91,99 @@ async def extrair_danfe(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ocorreu um erro interno durante o processamento da IA: {str(erro_interno)}"
         )
+
+
+@roteador_danfe.post(
+    "/extrair",
+    response_model=RespostaExtracaoDANFE,
+    status_code=status.HTTP_200_OK,
+    summary="Extrai dados estruturados de uma NF/DANFE via Upload",
+    description="Recebe um arquivo multipart/form-data (PDF ou Imagem) e processa a extracao de dados da NF atraves do modelo de IA selecionado, salvando o resultado em JSON na pasta Data/output."
+)
+async def extrair_danfe(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
+    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek, mistral, etc.)"),
+    cliente: DadosCliente = Depends(aplicar_rate_limit)
+) -> RespostaExtracaoDANFE:
+    """Endpoint HTTP para recebimento e processamento de documentos DANFE via Upload.
+
+    Requer autenticacao JWT via header 'Authorization: Bearer <token>'.
+    Rate limiting aplicado automaticamente por cliente.
+    """
+    nome_arquivo = file.filename or "documento_danfe.pdf"
+    print(f"\n[DEBUG ROUTER] Recebendo requisição multipart para arquivo: {nome_arquivo} | Cliente: {cliente.nome}")
+    print(f"[DEBUG ROUTER] Modelo IA escolhido: {modelo_ia}")
+
+    conteudo_bytes = await file.read()
+    print(f"[DEBUG ROUTER] Arquivo lido. Tamanho: {len(conteudo_bytes)} bytes")
+
+    background_tasks.add_task(
+        registrar_consumo,
+        cliente_id=cliente.cliente_id,
+        rota="/api/v1/danfe/extrair",
+        modelo_ia=modelo_ia
+    )
+
+    return await _processar_extracao(
+        conteudo_bytes=conteudo_bytes,
+        nome_arquivo=nome_arquivo,
+        modelo_ia=modelo_ia
+    )
+
+
+@roteador_danfe.post(
+    "/extrair-b64",
+    response_model=RespostaExtracaoDANFE,
+    status_code=status.HTTP_200_OK,
+    summary="Extrai dados estruturados de uma NF/DANFE via Base64",
+    description="Recebe o tipo do arquivo e o conteudo em base64 (JSON payload) e processa a extracao de dados da NF atraves do modelo de IA selecionado."
+)
+async def extrair_danfe_b64(
+    requisicao: RequisicaoExtracaoB64,
+    background_tasks: BackgroundTasks,
+    cliente: DadosCliente = Depends(aplicar_rate_limit)
+) -> RespostaExtracaoDANFE:
+    """Endpoint HTTP para processamento de DANFE enviada como Base64.
+
+    Requer autenticacao JWT via header 'Authorization: Bearer <token>'.
+    Rate limiting aplicado automaticamente por cliente.
+    """
+    tipo_limpo = requisicao.tipo_arquivo.strip().lower().lstrip(".")
+    modelo_ia = requisicao.modelo_ia or "gemini"
+    nome_arquivo = requisicao.nome_arquivo or f"documento_danfe.{tipo_limpo}"
+
+    if not nome_arquivo.lower().endswith(f".{tipo_limpo}"):
+        nome_arquivo = f"{Path(nome_arquivo).stem}.{tipo_limpo}"
+
+    print(f"\n[DEBUG ROUTER] Recebendo requisição Base64. Tipo: {tipo_limpo}, Nome: {nome_arquivo} | Cliente: {cliente.nome}")
+    print(f"[DEBUG ROUTER] Modelo IA escolhido: {modelo_ia}")
+
+    # Remove possível prefixo Data URL (ex: 'data:application/pdf;base64,...')
+    conteudo_b64 = requisicao.arquivo_b64
+    if "," in conteudo_b64:
+        conteudo_b64 = conteudo_b64.split(",", 1)[1]
+
+    try:
+        conteudo_bytes = base64.b64decode(conteudo_b64)
+    except Exception as erro_b64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Conteúdo em base64 inválido: {str(erro_b64)}"
+        )
+
+    print(f"[DEBUG ROUTER] Base64 decodificado com sucesso. Tamanho: {len(conteudo_bytes)} bytes")
+
+    background_tasks.add_task(
+        registrar_consumo,
+        cliente_id=cliente.cliente_id,
+        rota="/api/v1/danfe/extrair-b64",
+        modelo_ia=modelo_ia
+    )
+
+    return await _processar_extracao(
+        conteudo_bytes=conteudo_bytes,
+        nome_arquivo=nome_arquivo,
+        modelo_ia=modelo_ia
+    )
 

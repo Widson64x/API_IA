@@ -62,6 +62,15 @@ class MetadadosProcessamento(BaseModel):
     nome_arquivo_original: str = Field(..., description="Nome do arquivo enviado pelo cliente")
 
 
+class RequisicaoExtracaoB64(BaseModel):
+    """Payload de entrada para extração de DANFE via arquivo codificado em Base64."""
+
+    tipo_arquivo: str = Field(..., description="Extensão ou tipo do arquivo (ex: 'pdf', 'png', 'jpg', 'jpeg', 'webp')")
+    arquivo_b64: str = Field(..., description="Conteúdo do arquivo codificado em base64 (suporta data URL ou b64 puro)")
+    modelo_ia: Optional[str] = Field("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek, etc.)")
+    nome_arquivo: Optional[str] = Field(None, description="Nome opcional do arquivo (ex: 'nota_fiscal.pdf')")
+
+
 class RespostaExtracaoDANFE(BaseModel):
     """Payload de resposta padrão retornado pela API."""
 

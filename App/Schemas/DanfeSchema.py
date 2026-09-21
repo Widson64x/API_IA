@@ -90,6 +90,28 @@ class MetadadosProcessamento(ModeloDANFE):
     nome_arquivo_original: str = Field(..., description="Nome original do upload")
 
 
+class RequisicaoExtracaoB64(ModeloDANFE):
+    """Entrada para extração de um documento codificado em Base64."""
+
+    tipo_arquivo: str = Field(
+        ...,
+        description="Extensão do arquivo: pdf, png, jpg, jpeg ou webp",
+    )
+    arquivo_b64: str = Field(
+        ...,
+        min_length=1,
+        description="Base64 puro ou data URL contendo o documento",
+    )
+    modelo_ia: str = Field(
+        "gemini",
+        description="Provedor de IA configurado na aplicação",
+    )
+    nome_arquivo: Optional[str] = Field(
+        None,
+        description="Nome opcional do arquivo com extensão",
+    )
+
+
 class RespostaExtracaoDANFE(ModeloDANFE):
     """Resposta pública do endpoint de extração."""
 

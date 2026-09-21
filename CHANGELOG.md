@@ -6,6 +6,34 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não publicado]
 
+## [2.0.1] - 2026-09-21
+
+### Adicionado
+
+- Endpoint autenticado `POST /api/v1/danfe/extrair-b64` para receber DANFE em
+  Base64 puro ou no formato data URL, reutilizando a mesma extração do upload.
+- Validação estrita do conteúdo Base64, com respostas HTTP 400 para payloads
+  vazios, malformados ou data URLs sem a indicação `base64`.
+- Script de integração para exercitar o endpoint Base64 com autenticação JWT.
+
+### Alterado
+
+- Upload multipart e envio Base64 passam a compartilhar o mesmo pipeline de
+  validação, extração, persistência e métricas.
+- Respostas dos dois endpoints omitem propriedades sem valor.
+- Banco SQLite e JSONs produzidos durante a execução deixaram de ser
+  versionados e agora são preservados apenas no ambiente local.
+
+### Corrigido
+
+- Integração do endpoint Base64 com as validações de chave de acesso, OCR e
+  reconciliação de dados publicadas na versão 2.0.0.
+
+### Validação
+
+- Testes automatizados de regressão, Base64 e contrato da versão aprovados.
+- Compilação dos módulos e geração do OpenAPI validadas.
+
 ## [2.0.0] - 2026-09-21
 
 ### Adicionado

@@ -1,9 +1,11 @@
 """Testes da reconciliação e validação dos dados de DANFE."""
 
+import base64
 import unittest
 from typing import Any
 
 from App import VERSAO_TUPLA, __version__
+from App.Routers.DanfeRouter import _decodificar_arquivo_base64
 from App.Schemas.DanfeSchema import DadosDANFE
 from App.Services.BaseExtractorService import DANFEExtratorBase
 
@@ -26,8 +28,32 @@ class TesteExtracaoDANFE(unittest.TestCase):
         self.extrator = ExtratorTeste()
 
     def test_versao_da_aplicacao_e_semantica(self) -> None:
-        self.assertEqual(__version__, "2.0.0")
-        self.assertEqual(VERSAO_TUPLA, (2, 0, 0))
+        self.assertEqual(__version__, "2.0.1")
+        self.assertEqual(VERSAO_TUPLA, (2, 0, 1))
+
+    def test_base64_puro_e_data_url_sao_decodificados(self) -> None:
+        conteudo = b"%PDF-1.7\nconteudo de teste"
+        codificado = base64.b64encode(conteudo).decode("ascii")
+
+        self.assertEqual(_decodificar_arquivo_base64(codificado), conteudo)
+        self.assertEqual(
+            _decodificar_arquivo_base64(
+                f"data:application/pdf;base64,{codificado}"
+            ),
+            conteudo,
+        )
+
+    def test_base64_vazio_ou_invalido_e_rejeitado(self) -> None:
+        valores_invalidos = (
+            "",
+            "%%%invalido%%%",
+            "data:application/pdf,sem-base64",
+            "data:application/pdf;base64,",
+        )
+
+        for valor in valores_invalidos:
+            with self.subTest(valor=valor), self.assertRaises(ValueError):
+                _decodificar_arquivo_base64(valor)
 
     def test_chaves_reais_das_amostras_sao_validas(self) -> None:
         chaves = [

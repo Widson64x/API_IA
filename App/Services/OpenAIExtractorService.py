@@ -77,5 +77,9 @@ class ExtratorOpenAI(DANFEExtratorBase):
         )
 
         texto_resposta = resposta.choices[0].message.content
-        dados_dict = self._limpar_e_converter_json(texto_resposta)
+        dados_dict = self._limpar_e_converter_json(
+            texto_resposta,
+            conteudo_arquivo=conteudo_arquivo,
+            nome_arquivo=nome_arquivo,
+        )
         return DadosDANFE(**dados_dict)

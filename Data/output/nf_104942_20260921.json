@@ -1,0 +1,43 @@
+{
+  "arquivo": "nf_104942_20260921",
+  "extensao": "pdf",
+  "tamanho": "290771",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "Raiadrogasil S/A",
+        "cnpj": "61585865288406",
+        "cep": "68795000",
+        "endereco": "Rua BR 316, KM 25, s/n",
+        "cidade": "Benevides",
+        "uf": "PA",
+        "bairro": "Trevo"
+      },
+      "Destinatario": {
+        "nome": "110844 - SEMINA INDÚSTRIA E COMÉRCIO LTDA",
+        "cnpj": "55163042000216",
+        "cep": "29164153",
+        "endereco": "Rua Francisco Sousa dos Santos 320",
+        "cidade": "Serra",
+        "uf": "ES",
+        "bairro": "JD Limoeiro",
+        "numero": "320"
+      },
+      "NFO": {
+        "numero": "4716",
+        "serie": "1",
+        "data": "03/2026",
+        "chave_acesso": "32260355163042000216550010000047161323831584"
+      },
+      "NFD": {
+        "numero": "104942",
+        "serie": "4",
+        "data": "2026-04-15",
+        "chave_acesso": "15260461585865288406550040001049421202604159",
+        "volume": 3.0,
+        "valor": 931.68
+      }
+    }
+  ]
+}

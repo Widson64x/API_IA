@@ -1,0 +1,48 @@
+{
+  "arquivo": "",
+  "extensao": "",
+  "tamanho": "",
+  "data_criacao": "",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "PROFARMA DIST.PROD.FARMACEUTICOS S/",
+        "cnpj": "07421808002050",
+        "cep": "71608900",
+        "endereco": "AER JUSCELINO KUBITSCHEK, S/N",
+        "cidade": "BRASILIA",
+        "uf": "DF",
+        "bairro": "",
+        "numero": ""
+      },
+      "Destinatario": {
+        "nome": "MOKSHA8 BRASIL INDUSTRIA E COMERCIO",
+        "cnpj": "07591326000422",
+        "cep": "88316701",
+        "endereco": "R VEREADOR GERMANO LUIZ VIEIRA",
+        "cidade": "ITAJAI",
+        "uf": "SC",
+        "bairro": "ITAIPAVA",
+        "numero": "500"
+      },
+      "NFO": {
+        "numero": "000067450",
+        "serie": "",
+        "data": "2026-06-25",
+        "peso": 1.575,
+        "volume": 0.0,
+        "valor": 28791.52
+      },
+      "NFD": {
+        "numero": "232420",
+        "serie": "3",
+        "data": "2026-08-13",
+        "peso": 1.575,
+        "volume": 0.0,
+        "valor": 20557.14
+      },
+      "pedido": "PN 0001397680 DEV. DESACORDO COM. REF."
+    }
+  ]
+}

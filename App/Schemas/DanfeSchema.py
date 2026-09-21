@@ -1,71 +1,99 @@
-"""Schemas Pydantic para validação e estruturação dos dados extraídos de DANFE.
-
-Este módulo define a nova estrutura oficial dos dados de extração de Nota Fiscal,
-refletindo os detalhes de origem e destino, além das devoluções e importações.
-"""
+"""Schemas de validação dos dados extraídos de documentos fiscais."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class Entidade(BaseModel):
-    """Representa uma entidade (Remetente ou Destinatário) envolvida na transação."""
-    nome: Optional[str] = Field(None, description="Nome ou Razão Social")
-    cnpj: Optional[str] = Field(None, description="CNPJ (apenas números)")
-    cep: Optional[str] = Field(None, description="CEP (apenas números)")
-    endereco: Optional[str] = Field(None, description="Endereço principal")
-    cidade: Optional[str] = Field(None, description="Cidade")
-    uf: Optional[str] = Field(None, description="UF (Estado)")
-    bairro: Optional[str] = Field(None, description="Bairro")
+class ModeloDANFE(BaseModel):
+    """Configuração comum: ignora campos inesperados e remove espaços externos."""
+
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+
+class Entidade(ModeloDANFE):
+    """Empresa emitente ou destinatária da nota fiscal."""
+
+    nome: Optional[str] = Field(None, description="Nome ou razão social")
+    cnpj: Optional[str] = Field(None, description="CNPJ, somente com dígitos")
+    cep: Optional[str] = Field(None, description="CEP, somente com dígitos")
+    endereco: Optional[str] = Field(None, description="Logradouro")
+    cidade: Optional[str] = Field(None, description="Município")
+    uf: Optional[str] = Field(None, description="UF")
+    bairro: Optional[str] = Field(None, description="Bairro ou distrito")
     numero: Optional[str] = Field(None, description="Número do endereço")
 
 
-class DadosNota(BaseModel):
-    """Dados específicos de uma nota (seja ela original ou de devolução)."""
+class DadosNota(ModeloDANFE):
+    """Dados de uma nota fiscal original ou de devolução."""
+
     numero: Optional[str] = Field(None, description="Número da nota fiscal")
     serie: Optional[str] = Field(None, description="Série da nota fiscal")
-    data: Optional[str] = Field(None, description="Data de emissão (YYYY-MM-DD)")
-    peso: Optional[float] = Field(0.0, description="Peso bruto ou líquido")
-    volume: Optional[float] = Field(0.0, description="Volume ou quantidade transportada")
-    valor: Optional[float] = Field(0.0, description="Valor total da nota")
+    data: Optional[str] = Field(None, description="Data de emissão no formato YYYY-MM-DD")
+    chave_acesso: Optional[str] = Field(
+        None,
+        description="Chave de acesso da NF-e, com exatamente 44 dígitos",
+    )
+    peso: Optional[float] = Field(None, description="Peso bruto em kg")
+    volume: Optional[float] = Field(None, description="Quantidade de volumes")
+    valor: Optional[float] = Field(None, description="Valor total da nota")
 
 
-class NotaFiscalItem(BaseModel):
-    """Detalhamento individual das informações extraídas do documento."""
-    
-    Remetente: Optional[Entidade] = Field(None, description="Dados de quem emitiu a nota atual")
-    Destinatario: Optional[Entidade] = Field(None, description="Dados de quem receberá a carga/nota atual")
-    
-    NFO: Optional[DadosNota] = Field(None, description="Dados da Nota Fiscal Original (Venda/Remessa)")
-    NFD: Optional[DadosNota] = Field(None, description="Dados da Nota Fiscal de Devolução (se houver)")
-    
-    pedido: Optional[str] = Field(None, description="Número do pedido referenciado")
+class NotaFiscalItem(ModeloDANFE):
+    """Uma DANFE identificada no documento enviado."""
+
+    Remetente: Optional[Entidade] = Field(
+        None,
+        description="Emitente identificado no cabeçalho da DANFE",
+    )
+    Destinatario: Optional[Entidade] = Field(
+        None,
+        description="Empresa do quadro DESTINATÁRIO / REMETENTE",
+    )
+    NFO: Optional[DadosNota] = Field(
+        None,
+        description="Nota fiscal original referenciada pela devolução",
+    )
+    NFD: Optional[DadosNota] = Field(
+        None,
+        description="Nota fiscal de devolução exibida no cabeçalho da DANFE",
+    )
+    pedido: Optional[str] = Field(
+        None,
+        description="Número explicitamente identificado como pedido",
+    )
 
 
-class DadosDANFE(BaseModel):
-    """Modelo completo contendo os dados estruturados da NF conforme o novo layout padrão."""
+class DadosDANFE(ModeloDANFE):
+    """Resultado estruturado da extração de um arquivo."""
 
-    arquivo: Optional[str] = Field(None, description="Identificador do arquivo")
-    extensao: Optional[str] = Field(None, description="Extensão do arquivo")
-    tamanho: Optional[str] = Field(None, description="Tamanho do arquivo")
-    data_criacao: Optional[str] = Field(None, description="Data de criação")
-    quantidade_nota: Optional[int] = Field(0, description="Quantidade total de notas")
-    notaFiscalList: List[NotaFiscalItem] = Field(default_factory=list, description="Lista de notas fiscais extraídas")
-
-
-class MetadadosProcessamento(BaseModel):
-    """Metadados técnicos sobre a execução da extração por IA."""
-
-    modelo_utilizado: str = Field(..., description="Nome ou chave do modelo de IA utilizado")
-    provedor: str = Field(..., description="Nome do provedor")
-    tempo_execucao_segundos: float = Field(..., description="Tempo total gasto no processamento")
-    nome_arquivo_original: str = Field(..., description="Nome do arquivo enviado pelo cliente")
+    arquivo: Optional[str] = Field(None, description="Nome do arquivo sem extensão")
+    extensao: Optional[str] = Field(None, description="Extensão do arquivo sem ponto")
+    tamanho: Optional[str] = Field(None, description="Tamanho exato do arquivo em bytes")
+    data_criacao: Optional[str] = Field(
+        None,
+        description="Data de criação presente nos metadados do documento",
+    )
+    quantidade_nota: int = Field(0, description="Quantidade de DANFEs identificadas")
+    notaFiscalList: List[NotaFiscalItem] = Field(
+        default_factory=list,
+        description="Uma entrada por DANFE; anexos e DACTEs não geram entradas",
+    )
 
 
-class RespostaExtracaoDANFE(BaseModel):
-    """Payload de resposta padrão retornado pela API."""
+class MetadadosProcessamento(ModeloDANFE):
+    """Metadados técnicos da execução."""
 
-    sucesso: bool = Field(..., description="Indica se a extração foi concluída com sucesso")
-    mensagem: str = Field(..., description="Mensagem descritiva")
-    dados: Optional[DadosDANFE] = Field(None, description="Dados estruturados extraídos")
-    metadados: Optional[MetadadosProcessamento] = Field(None, description="Metadados técnicos")
+    modelo_utilizado: str = Field(..., description="Modelo solicitado")
+    provedor: str = Field(..., description="Provedor utilizado")
+    tempo_execucao_segundos: float = Field(..., description="Tempo de processamento")
+    nome_arquivo_original: str = Field(..., description="Nome original do upload")
+
+
+class RespostaExtracaoDANFE(ModeloDANFE):
+    """Resposta pública do endpoint de extração."""
+
+    sucesso: bool
+    mensagem: str
+    dados: Optional[DadosDANFE] = None
+    metadados: Optional[MetadadosProcessamento] = None

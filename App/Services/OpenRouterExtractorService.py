@@ -162,7 +162,11 @@ class ExtratorOpenRouter(DANFEExtratorBase):
                 print(f"[DEBUG OPENROUTER] Texto da resposta recebida (Tamanho: {len(texto_resposta)} caracteres):\n{texto_resposta[:300]}...")
                 
                 print(f"[DEBUG OPENROUTER] Iniciando parse JSON da resposta...")
-                dados_dict = self._limpar_e_converter_json(texto_resposta)
+                dados_dict = self._limpar_e_converter_json(
+                    texto_resposta,
+                    conteudo_arquivo=conteudo_arquivo,
+                    nome_arquivo=nome_arquivo,
+                )
                 print(f"[DEBUG OPENROUTER] Parse concluído com sucesso!")
                 return DadosDANFE(**dados_dict)
 

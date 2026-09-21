@@ -24,6 +24,7 @@ EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
 @roteador_danfe.post(
     "/extrair",
     response_model=RespostaExtracaoDANFE,
+    response_model_exclude_none=True,
     status_code=status.HTTP_200_OK,
     summary="Extrai dados estruturados de uma NF/DANFE",
     description="Recebe um arquivo (PDF ou Imagem) e processa a extracao de dados da NF atraves do modelo de IA selecionado, salvando o resultado em JSON na pasta Data/output."
@@ -31,7 +32,10 @@ EXTENSOES_PERMITIDAS = {"pdf", "png", "jpg", "jpeg", "webp"}
 async def extrair_danfe(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Arquivo da DANFE (PDF, PNG, JPG, WEBP)"),
-    modelo_ia: str = Form("gemini", description="Modelo de IA a utilizar (gemini, openai, claude, deepseek)")
+    modelo_ia: str = Form(
+        "gemini",
+        description="Provedor de IA (gemini, openai, claude, openrouter, groq ou mistral)",
+    ),
 ) -> RespostaExtracaoDANFE:
     """Endpoint HTTP para recebimento e processamento de documentos DANFE.
 
@@ -88,7 +92,7 @@ async def extrair_danfe(
         caminho_json = configuracao.DIR_OUTPUT / f"{nome_base}.json"
         
         with open(caminho_json, "w", encoding="utf-8") as file_json:
-            file_json.write(dados_extraidos.model_dump_json(indent=2))
+            file_json.write(dados_extraidos.model_dump_json(indent=2, exclude_none=True))
 
         tempo_total = round(time.perf_counter() - tempo_inicio, 3)
         nome_provedor = extrator.__class__.__name__.replace("Extrator", "")

@@ -1,48 +1,49 @@
 {
-  "arquivo": "",
-  "extensao": "",
-  "tamanho": "",
-  "data_criacao": "",
+  "arquivo": "nome_do_arquivo",
+  "extensao": "pdf",
+  "tamanho": "0",
   "quantidade_nota": 1,
   "notaFiscalList": [
     {
       "Remetente": {
-        "nome": "EMPREENDIMENTOS PAGUE MENOS SA",
-        "cnpj": "8132555511",
-        "cep": "51135505",
-        "endereco": "RUA RIBEIRAO",
-        "cidade": "JABOATAO DOS GUARARAPES",
-        "uf": "PE",
-        "bairro": "MURIBECA",
-        "numero": "807"
+        "nome": null,
+        "cnpj": null,
+        "cep": null,
+        "endereco": null,
+        "cidade": null,
+        "uf": null,
+        "bairro": null,
+        "numero": null
       },
       "Destinatario": {
-        "nome": "MOKSHA8 BRASIL INDUSTRIA E COMERCIO DE M",
-        "cnpj": "07591326000422",
-        "cep": "88316003",
-        "endereco": "ROD ANTONIO HEIL",
-        "cidade": "ITAJAI",
-        "uf": "SC",
-        "bairro": "QUILOMETRO DOZE",
-        "numero": "4999"
+        "nome": null,
+        "cnpj": null,
+        "cep": null,
+        "endereco": null,
+        "cidade": null,
+        "uf": null,
+        "bairro": null,
+        "numero": null
       },
       "NFO": {
-        "numero": "68149",
-        "serie": "1",
-        "data": "2026-08-13",
-        "peso": 2.01,
-        "volume": 2.0,
-        "valor": 2.11
+        "numero": null,
+        "serie": null,
+        "data": null,
+        "chave_acesso": null,
+        "peso": null,
+        "volume": null,
+        "valor": null
       },
       "NFD": {
-        "numero": "63692",
-        "serie": "2",
-        "data": "",
-        "peso": 0.0,
-        "volume": 0.0,
-        "valor": 0.0
+        "numero": null,
+        "serie": null,
+        "data": null,
+        "chave_acesso": null,
+        "peso": null,
+        "volume": null,
+        "valor": null
       },
-      "pedido": ""
+      "pedido": null
     }
   ]
 }

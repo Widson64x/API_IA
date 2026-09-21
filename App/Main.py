@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from App import __version__
 from App.Core.Config import configuracao
 from App.Core.Database import inicializar_banco
 from App.Routers.AdminRouter import roteador_admin
@@ -30,7 +31,7 @@ app = FastAPI(
         "API para recepcao de notas fiscais (DANFE em PDF/Imagem) e extracao de dados "
         "via Gemini, OpenAI, Claude e DeepSeek. Autenticacao via JWT com API Keys."
     ),
-    version="1.1.0",
+    version=__version__,
     root_path=configuracao.ROOT_PATH_FORMATTED,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -64,7 +65,7 @@ def verificar_status_api() -> dict:
     return {
         "status": "online",
         "aplicacao": "API de Extracao de DANFE",
-        "versao": "1.1.0",
+        "versao": __version__,
         "documentacao": "/docs",
         "autenticacao": "JWT via /api/v1/auth/token"
     }

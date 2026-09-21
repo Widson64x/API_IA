@@ -1,0 +1,43 @@
+{
+  "arquivo": "nf_31679_20260921",
+  "extensao": "pdf",
+  "tamanho": "532033",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "SC DISTRIBUICAO LTDA",
+        "cnpj": "01206820002655",
+        "cep": "68795000",
+        "endereco": "ROD BR 316 KM 23/24, S/N",
+        "cidade": "BENEVIDES",
+        "uf": "PA"
+      },
+      "Destinatario": {
+        "nome": "MOKSHA8 BR IND E COM DE MEDICAMENTO",
+        "cnpj": "07591326000422",
+        "cep": "88316701",
+        "endereco": "R VEREADOR GERMANO LUIZ VIEIRA",
+        "cidade": "ITAJAI",
+        "uf": "SC",
+        "bairro": "ITAIPAVA",
+        "numero": "500"
+      },
+      "NFO": {
+        "numero": "63107",
+        "serie": "1",
+        "data": "2026-03-26",
+        "chave_acesso": "42260307591326000422550010000631071276480157"
+      },
+      "NFD": {
+        "numero": "31679",
+        "serie": "2",
+        "data": "2026-04-17",
+        "chave_acesso": "15260401206820002655550020000316791049620168",
+        "peso": 0.08,
+        "volume": 1.0,
+        "valor": 31.39
+      }
+    }
+  ]
+}

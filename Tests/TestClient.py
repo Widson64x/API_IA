@@ -6,13 +6,23 @@ de uma pasta inteira. Oferece escolha de modelos de IA e salva relatórios em JS
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
 from typing import List, Dict, Any
+
 import requests
 from tabulate import tabulate
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
+from App.Core.Config import configuracao
+
+
+URL_BASE_PADRAO = (
+    f"http://127.0.0.1:{configuracao.PORT}{configuracao.ROOT_PATH_FORMATTED}"
+)
 
 
 class ClienteTesteDANFE:
@@ -22,20 +32,20 @@ class ClienteTesteDANFE:
         url_api (str): Endpoint completo da API para envio da requisição.
     """
 
-    def __init__(self, url_base: str = "http://localhost:8000"):
+    def __init__(self, url_base: str = URL_BASE_PADRAO):
         """Inicializa o cliente de testes.
 
         Args:
-            url_base (str): URL base do servidor FastAPI. Padrão 'http://localhost:8000'.
+            url_base (str): URL base do servidor FastAPI derivada da configuração.
         """
         self.url_api = f"{url_base.rstrip('/')}/api/v1/danfe/extrair"
 
-    def enviar_documento(self, caminho_arquivo: str, modelo_ia: str = "gemini-flash") -> Dict[str, Any]:
+    def enviar_documento(self, caminho_arquivo: str, modelo_ia: str = "gemini") -> Dict[str, Any]:
         """Envia um único arquivo para a API e retorna o resultado da extração.
 
         Args:
             caminho_arquivo (str): Caminho absoluto ou relativo do arquivo a ser testado.
-            modelo_ia (str): Nome do modelo de IA desejado. Padrão 'gemini-flash'.
+            modelo_ia (str): Nome do provedor de IA. Padrão 'gemini'.
 
         Returns:
             Dict[str, Any]: Dicionário com a resposta da API contendo sucesso, dados e metadados.
@@ -73,7 +83,7 @@ class ClienteTesteDANFE:
             print(f"   Status: EXCECAO | Erro: {str(erro)}")
             return {"sucesso": False, "mensagem": str(erro), "nome_arquivo": path_obj.name}
 
-    def processar_diretorio(self, caminho_pasta: str, modelo_ia: str = "gemini-flash") -> List[Dict[str, Any]]:
+    def processar_diretorio(self, caminho_pasta: str, modelo_ia: str = "gemini") -> List[Dict[str, Any]]:
         """Varre um diretório enviando todas as DANFEs encontradas (PDF, PNG, JPG, WEBP).
 
         Args:
@@ -124,12 +134,16 @@ class ClienteTesteDANFE:
                 sucessos += 1
                 dados = r.get("dados", {})
                 meta = r.get("metadados", {})
+                itens = dados.get("notaFiscalList", [])
+                item = itens[0] if itens else {}
+                nota = item.get("NFD") or item.get("NFO") or {}
+                emitente = item.get("Remetente") or {}
                 tabela.append([
                     meta.get("nome_arquivo_original"),
-                    dados.get("chave_acesso") or "N/A",
-                    dados.get("numero_nota") or "N/A",
-                    dados.get("emitente", {}).get("razao_social") or "N/A",
-                    f"R$ {dados.get('valores_totais', {}).get('valor_total_nota', 0.0):.2f}",
+                    nota.get("chave_acesso") or "N/A",
+                    nota.get("numero") or "N/A",
+                    emitente.get("nome") or "N/A",
+                    f"R$ {nota.get('valor', 0.0):.2f}",
                     f"{meta.get('tempo_execucao_segundos')}s",
                     "OK"
                 ])
@@ -170,8 +184,20 @@ def executar_cli():
     parser = argparse.ArgumentParser(description="Cliente de teste para a API de Extração de DANFE.")
     parser.add_argument("--arquivo", "-f", type=str, help="Caminho de um arquivo de DANFE avulso para teste.")
     parser.add_argument("--pasta", "-d", type=str, default=pasta_input_padrao, help="Caminho da pasta contendo múltiplos arquivos de DANFE (Padrão: Data/input).")
-    parser.add_argument("--modelo", "-m", type=str, default="gemini", help="Modelo de IA (gemini, openai, claude, openrouter, groq).")
-    parser.add_argument("--url", "-u", type=str, default="http://localhost:8000", help="URL base da API FastAPI.")
+    parser.add_argument(
+        "--modelo",
+        "-m",
+        type=str,
+        default="gemini",
+        help="Provedor de IA (gemini, openai, claude, openrouter, groq ou mistral).",
+    )
+    parser.add_argument(
+        "--url",
+        "-u",
+        type=str,
+        default=URL_BASE_PADRAO,
+        help=f"URL base da API FastAPI (padrão: {URL_BASE_PADRAO}).",
+    )
 
     args = parser.parse_args()
     cliente = ClienteTesteDANFE(url_base=args.url)
@@ -190,9 +216,12 @@ def executar_cli():
         print("3. Digitar o caminho de outra pasta")
         opcao = input("\nEscolha a opção (1, 2 ou 3): ").strip()
 
-        modelo = input("Digite o modelo de IA (Padrão: gemini-flash) [gemini-flash/gpt-4o-mini/claude-3-5-sonnet/deepseek-chat]: ").strip()
+        modelo = input(
+            "Digite o provedor (padrão: gemini) "
+            "[gemini/openai/claude/openrouter/groq/mistral]: "
+        ).strip()
         if not modelo:
-            modelo = "gemini-flash"
+            modelo = "gemini"
 
         if opcao == "1":
             caminho = input("Digite o caminho do arquivo: ").strip().strip('"')

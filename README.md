@@ -1,5 +1,8 @@
 # API de Extração de Dados de DANFE com IA Multi-Provedor
 
+Versão atual: **2.0.0**. Consulte o [CHANGELOG.md](CHANGELOG.md) para detalhes
+das alterações e incompatibilidades entre versões.
+
 API em Python desenvolvida com FastAPI para recepção de Documentos Auxiliares da Nota Fiscal Eletrônica (DANFE) em formato PDF ou Imagem (PNG, JPG, WEBP) e extração de dados estruturados utilizando Inteligência Artificial (Google Gemini, OpenAI GPT, Anthropic Claude, DeepSeek e OpenRouter).
 
 O sistema conta com um módulo robusto de **Autenticação e Administração de Clientes**, garantindo acesso seguro via JSON Web Tokens (JWT) e controle de tráfego por limites de requisição (Rate Limiting).
@@ -117,5 +120,5 @@ python Tests/TestarAutenticacao.py
 Pode-se processar pastas inteiras de DANFEs, gerando um relatório em JSON para medir assertividade dos diferentes provedores de IA.
 
 ```bash
-python Tests/TestClient.py --pasta caminho/para/pasta_danfes --modelo gemini-flash
+python Tests/TestClient.py --pasta caminho/para/pasta_danfes --modelo mistral
 ```

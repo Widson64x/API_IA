@@ -1,0 +1,48 @@
+{
+  "arquivo": "35260556992217000180550013000000711544746252-nfe",
+  "extensao": ".pdf",
+  "tamanho": "101.10 KB",
+  "data_criacao": "2026-08-20 09:11:01",
+  "quantidade_nota": 1,
+  "notaFiscalList": [
+    {
+      "Remetente": {
+        "nome": "WELEDA DO BRASIL",
+        "cnpj": "56992217000180",
+        "cep": "05125000",
+        "endereco": "RUA BRIGADEIRO HENRIQUE FONTENELLE",
+        "cidade": "SAO PAULO",
+        "uf": "SP",
+        "bairro": "PQ SAO DOMINGOS",
+        "numero": "33"
+      },
+      "Destinatario": {
+        "nome": "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL",
+        "cnpj": "17256512002917",
+        "cep": "32210110",
+        "endereco": "AVENIDA GENERAL DAVID SARNOFF",
+        "cidade": "CONTAGEM",
+        "uf": "MG",
+        "bairro": "CIDADE INDUSTRIAL",
+        "numero": "3405"
+      },
+      "NFO": {
+        "numero": "300000071",
+        "serie": "1",
+        "data": "20/05/2026",
+        "peso": 0.0,
+        "volume": 0.0,
+        "valor": 39.11
+      },
+      "NFD": {
+        "numero": "",
+        "serie": "",
+        "data": "",
+        "peso": 0.0,
+        "volume": 0.0,
+        "valor": 0.0
+      },
+      "pedido": "B00547"
+    }
+  ]
+}

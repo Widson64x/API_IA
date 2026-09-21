@@ -27,22 +27,22 @@
         "numero": "252"
       },
       "NFO": {
-        "numero": "2940740",
+        "numero": "2940749",
         "serie": "2",
         "data": "24/07/2026",
-        "peso": 0.85,
+        "peso": 0.4,
         "volume": 1.0,
-        "valor": 1242.75
+        "valor": 357.46
       },
       "NFD": {
-        "numero": "000031615",
+        "numero": "000058855",
         "serie": "",
-        "data": "16/02/2024",
+        "data": "18/12/2024",
         "peso": 0.0,
         "volume": 0.0,
         "valor": 0.0
       },
-      "pedido": "VENCIDO"
+      "pedido": ""
     }
   ]
 }

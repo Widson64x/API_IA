@@ -99,7 +99,7 @@ Content-Type: multipart/form-data
 
 **Body (Form Data)**:
 - `file`: (Arquivo binário PDF ou Imagem da DANFE)
-- `modelo_ia`: `gemini-flash` (ou o modelo contratado)
+- `modelo_ia`: provedor configurado (`gemini`, `openai`, `claude`, `openrouter`, `groq` ou `mistral`)
 
 **Exemplo em cURL**:
 ```bash
@@ -107,7 +107,7 @@ curl -X POST "http://localhost:8000/api/v1/danfe/extrair" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
   -H "Content-Type: multipart/form-data" \
   -F "file=@caminho/para/danfe.pdf" \
-  -F "modelo_ia=gemini-flash"
+  -F "modelo_ia=mistral"
 ```
 
 ### Passo 3.3: Renovar o Token de Acesso (Refresh)

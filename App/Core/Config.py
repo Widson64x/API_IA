@@ -7,6 +7,8 @@ e parametros de seguranca JWT.
 
 from pathlib import Path
 from typing import Optional
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,6 +65,19 @@ class ConfiguracaoAplicacao(BaseSettings):
 
     DIR_INPUT: Path = Path("Data/input")
     DIR_OUTPUT: Path = Path("Data/output")
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def interpretar_ambiente_como_debug(cls, valor: object) -> object:
+        """Aceita nomes usuais de ambiente além dos booleanos literais."""
+
+        if isinstance(valor, str):
+            normalizado = valor.strip().casefold()
+            if normalizado in {"release", "production", "producao", "produção"}:
+                return False
+            if normalizado in {"debug", "development", "desenvolvimento"}:
+                return True
+        return valor
 
     model_config = SettingsConfigDict(
         env_file=".env",

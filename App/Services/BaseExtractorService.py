@@ -80,6 +80,95 @@ class DANFEExtratorBase(ABC):
         except Exception:
             return ""
 
+    def _extrair_data_criacao_arquivo(
+        self,
+        conteudo_arquivo: bytes,
+        nome_arquivo: str,
+    ) -> Optional[str]:
+        """Obtém uma data confiável dos metadados internos do arquivo.
+
+        Alguns geradores de PDF não mantêm ``creationDate``. Nesses casos,
+        ``modDate`` é usado como a melhor data documental disponível. Para
+        imagens, são consultados os campos EXIF de criação e modificação.
+        """
+
+        datas: list[Any] = []
+        extensao = Path(nome_arquivo).suffix.casefold()
+        try:
+            if extensao == ".pdf":
+                documento = pymupdf.open(stream=conteudo_arquivo, filetype="pdf")
+                try:
+                    metadados = documento.metadata or {}
+                    datas.extend(
+                        (metadados.get("creationDate"), metadados.get("modDate"))
+                    )
+                finally:
+                    documento.close()
+            elif extensao in {".png", ".jpg", ".jpeg", ".webp"}:
+                with Image.open(io.BytesIO(conteudo_arquivo)) as imagem:
+                    exif = imagem.getexif()
+                    datas.extend((exif.get(36867), exif.get(306)))
+        except Exception:
+            return None
+
+        for valor in datas:
+            if not valor:
+                continue
+            correspondencia = re.search(
+                r"(?:D:)?(\d{4})[:\-]?(\d{2})[:\-]?(\d{2})",
+                str(valor),
+            )
+            if not correspondencia:
+                continue
+            data = "-".join(correspondencia.groups())
+            normalizada = self._normalizar_data(data)
+            if normalizada:
+                return normalizada
+        return None
+
+    def _extrair_chaves_codigo_barras(
+        self,
+        conteudo_arquivo: bytes,
+        nome_arquivo: str,
+    ) -> list[str]:
+        """Lê chaves NF-e diretamente dos códigos de barras do documento."""
+
+        try:
+            import zxingcpp
+        except ImportError:
+            return []
+
+        imagens: list[Image.Image] = []
+        extensao = Path(nome_arquivo).suffix.casefold()
+        try:
+            if extensao == ".pdf":
+                documento = pymupdf.open(stream=conteudo_arquivo, filetype="pdf")
+                try:
+                    matriz = pymupdf.Matrix(300 / 72, 300 / 72)
+                    for pagina in documento:
+                        pixmap = pagina.get_pixmap(matrix=matriz, alpha=False)
+                        imagens.append(
+                            Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB")
+                        )
+                finally:
+                    documento.close()
+            elif extensao in {".png", ".jpg", ".jpeg", ".webp"}:
+                imagens.append(Image.open(io.BytesIO(conteudo_arquivo)).convert("RGB"))
+        except Exception:
+            return []
+
+        chaves: list[str] = []
+        for imagem in imagens:
+            try:
+                codigos = zxingcpp.read_barcodes(imagem)
+            except Exception:
+                continue
+            for codigo in codigos:
+                chave = re.sub(r"\D", "", str(codigo.text))
+                if self._chave_acesso_valida(chave) and chave not in chaves:
+                    chaves.append(chave)
+        return chaves
+
     def _limpar_e_converter_json(
         self,
         texto_resposta: str,
@@ -134,6 +223,13 @@ class DANFEExtratorBase(ABC):
         notas_validas: list[dict[str, Any]] = []
         digitos_documento = re.sub(r"\D", "", texto_documento)
         chaves_documento = self._extrair_chaves_acesso(texto_documento)
+        if conteudo_arquivo is not None and nome_arquivo:
+            for chave in self._extrair_chaves_codigo_barras(
+                conteudo_arquivo,
+                nome_arquivo,
+            ):
+                if chave not in chaves_documento:
+                    chaves_documento.append(chave)
         cnpjs_papeis = (
             self._extrair_cnpjs_papeis(texto_documento) if len(notas) == 1 else {}
         )
@@ -175,6 +271,12 @@ class DANFEExtratorBase(ABC):
                 ):
                     nota.pop("Destinatario", None)
 
+            for entidade_nome in ("Remetente", "Destinatario"):
+                entidade = nota.get(entidade_nome)
+                if isinstance(entidade, dict) and entidade:
+                    entidade.setdefault("bairro", "S/N")
+                    entidade.setdefault("numero", "S/N")
+
             for bloco_nome in ("NFO", "NFD"):
                 bloco = nota.get(bloco_nome)
                 if not isinstance(bloco, dict):
@@ -195,17 +297,39 @@ class DANFEExtratorBase(ABC):
                 usar_primeira_chave=len(notas) == 1,
             )
 
-            if texto_documento and "pedido" not in texto_documento.casefold():
-                nota.pop("pedido", None)
+            # Quando os dois blocos existem, NFO é apenas a nota original
+            # referenciada. Peso, volume e valor pertencem à DANFE atual (NFD)
+            # e não podem ser copiados da devolução para a nota de origem.
+            if isinstance(nota.get("NFD"), dict) and isinstance(
+                nota.get("NFO"), dict
+            ):
+                for campo in ("peso", "volume", "valor"):
+                    nota["NFO"].pop(campo, None)
+
+            pedido = nota.get("pedido")
+            if not isinstance(pedido, str) or not pedido.strip():
+                nota["pedido"] = "S/N"
+            else:
+                pedido = pedido.strip()
+                digitos_pedido = re.sub(r"\D", "", pedido).lstrip("0") or "0"
+                numeros_notas = {
+                    (re.sub(r"\D", "", str(bloco.get("numero", ""))).lstrip("0") or "0")
+                    for nome_bloco in ("NFO", "NFD")
+                    if isinstance((bloco := nota.get(nome_bloco)), dict)
+                    and bloco.get("numero")
+                }
+                # Evita a falha observada em que a IA reutiliza o número da
+                # NFO/NFD como pedido. Valores textuais continuam preservados.
+                if pedido.isdigit() and digitos_pedido in numeros_notas:
+                    nota["pedido"] = "S/N"
+                else:
+                    nota["pedido"] = pedido
 
             nota = self._normalizar_ausentes(nota)
             if nota and not self._nota_duplicada(nota, notas_validas):
                 notas_validas.append(nota)
 
-        resultado: dict[str, Any] = {
-            "quantidade_nota": len(notas_validas),
-            "notaFiscalList": notas_validas,
-        }
+        resultado: dict[str, Any] = {}
         if nome_arquivo:
             caminho = Path(nome_arquivo)
             resultado["arquivo"] = caminho.stem
@@ -213,11 +337,25 @@ class DANFEExtratorBase(ABC):
         if conteudo_arquivo is not None:
             resultado["tamanho"] = str(len(conteudo_arquivo))
 
-        # A data de criação só é aceita se realmente veio do documento. O nome,
-        # extensão e tamanho são sempre derivados do upload, nunca da IA.
-        data_criacao = dados.get("data_criacao")
-        if data_criacao and texto_documento and str(data_criacao) in texto_documento:
+        data_criacao = None
+        if conteudo_arquivo is not None and nome_arquivo:
+            data_criacao = self._extrair_data_criacao_arquivo(
+                conteudo_arquivo,
+                nome_arquivo,
+            )
+        if not data_criacao:
+            data_informada = self._normalizar_data(dados.get("data_criacao"))
+            if (
+                data_informada
+                and texto_documento
+                and str(dados.get("data_criacao")) in texto_documento
+            ):
+                data_criacao = data_informada
+        if data_criacao:
             resultado["data_criacao"] = data_criacao
+
+        resultado["quantidade_nota"] = len(notas_validas)
+        resultado["notaFiscalList"] = notas_validas
         return resultado
 
     def _normalizar_entidade(
@@ -251,12 +389,36 @@ class DANFEExtratorBase(ABC):
         if isinstance(endereco, str):
             # Confusão recorrente do OCR em rodovias; "RGD BR" não é um
             # prefixo de logradouro válido, enquanto "ROD BR" é impresso.
-            entidade["endereco"] = re.sub(
+            endereco = re.sub(
                 r"^RGD\s+BR\b",
                 "ROD BR",
                 endereco,
                 flags=re.IGNORECASE,
             )
+            # Alguns DANFEs imprimem tudo em uma linha no formato
+            # LOGRADOURO, NUMERO - BAIRRO. Se não houver número explícito,
+            # LOGRADOURO, BAIRRO também é aceito e o número permanece S/N.
+            endereco_composto = re.fullmatch(
+                r"\s*(.+?)\s*,\s*(S\s*/?\s*N|\d+[A-Z]?)\s*[-–—]\s*(.+?)\s*",
+                endereco,
+                flags=re.IGNORECASE,
+            )
+            if endereco_composto:
+                logradouro, numero, bairro = endereco_composto.groups()
+                entidade["endereco"] = logradouro.strip(" ,-–—")
+                entidade["numero"] = re.sub(r"\s+", "", numero).upper()
+                entidade["bairro"] = bairro.strip(" ,-–—")
+            else:
+                partes = [parte.strip() for parte in endereco.rsplit(",", 1)]
+                sufixo_textual = len(partes) == 2 and bool(
+                    re.fullmatch(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]+", partes[1])
+                )
+                if sufixo_textual and not entidade.get("bairro"):
+                    entidade["endereco"] = partes[0]
+                    entidade["bairro"] = partes[1]
+                    entidade.setdefault("numero", "S/N")
+                else:
+                    entidade["endereco"] = endereco
 
     @classmethod
     def _reconciliar_nome_com_ocr(
@@ -663,18 +825,18 @@ class DANFEExtratorBase(ABC):
         return """Analise todas as páginas deste arquivo e extraia somente DANFEs de NF-e.
 Ignore completamente DACTE/CT-e, comprovantes, canhotos isolados, etiquetas, fotos de caixas e outros anexos. Cada DANFE gera exatamente um item em notaFiscalList.
 
-Retorne somente um objeto JSON válido, sem Markdown, comentários ou explicações, com esta estrutura. OMITE qualquer campo cujo valor não esteja legível ou comprovado no documento:
+Retorne somente um objeto JSON válido, sem Markdown, comentários ou explicações, com esta estrutura. OMITE qualquer campo cujo valor não esteja legível ou comprovado no documento, exceto bairro, numero e pedido, que devem ser "S/N" quando ausentes:
 {"notaFiscalList":[{"Remetente":{"nome":null,"cnpj":null,"cep":null,"endereco":null,"cidade":null,"uf":null,"bairro":null,"numero":null},"Destinatario":{"nome":null,"cnpj":null,"cep":null,"endereco":null,"cidade":null,"uf":null,"bairro":null,"numero":null},"NFO":{"numero":null,"serie":null,"data":null,"chave_acesso":null,"peso":null,"volume":null,"valor":null},"NFD":{"numero":null,"serie":null,"data":null,"chave_acesso":null,"peso":null,"volume":null,"valor":null},"pedido":null}]}
 
 REGRAS OBRIGATÓRIAS:
-1. Não invente, complete, estime, copie de exemplos ou repita dados para preencher campos. Não use string vazia, N/A ou zero para dado ausente: omita o campo.
-2. Remetente é exclusivamente o EMITENTE no cabeçalho da DANFE. Destinatario é exclusivamente a empresa no quadro DESTINATÁRIO / REMETENTE. Transportadora, expedidor, recebedor e tomador nunca são Remetente ou Destinatario. cidade vem do campo MUNICÍPIO; bairro vem do campo BAIRRO / DISTRITO — não os inverta.
+1. Não invente, complete, estime, copie de exemplos ou repita dados para preencher campos. Não use string vazia, N/A ou zero para dado ausente: omita o campo. As únicas exceções são bairro, numero e pedido, que devem ser "S/N" quando não estiverem disponíveis.
+2. Remetente é exclusivamente o EMITENTE no cabeçalho da DANFE. Destinatario é exclusivamente a empresa no quadro DESTINATÁRIO / REMETENTE. Transportadora, expedidor, recebedor e tomador nunca são Remetente ou Destinatario. cidade vem do campo MUNICÍPIO; bairro vem do campo BAIRRO / DISTRITO ou do trecho final da linha combinada de endereço. Quando a linha estiver no formato "LOGRADOURO, NUMERO - BAIRRO", separe os três valores: endereco recebe apenas LOGRADOURO, numero recebe NUMERO (inclusive S/N) e bairro recebe BAIRRO. Quando estiver "LOGRADOURO, BAIRRO", use numero="S/N". Não confunda bairro com cidade. Se bairro ou numero estiver realmente ausente, use "S/N".
 3. NFD significa Nota Fiscal de Devolução: quando a natureza indicar devolução, retorno ou estorno, coloque em NFD o número, série, data, chave, peso, volumes e valor total da DANFE atual.
 4. NFO significa Nota Fiscal Original: coloque em NFO apenas a nota original referenciada pela devolução, priorizando uma indicação explícita como "NFO", "NF Origem" ou equivalente. Não copie peso, volume ou valor da NFD para a NFO. Não confunda pedido, lote, protocolo, inscrição estadual, CT-e ou outra NF-e referenciada por motivo diferente com a NFO.
 5. Em uma nota comum que não seja devolução/retorno/estorno, coloque a DANFE atual em NFO e omita NFD.
 6. chave_acesso possui exatamente 44 dígitos. Remova espaços e pontuação, mas nunca complete dígitos. Confira todos os 44 dígitos uma segunda vez antes de responder. Inclua a chave separadamente em NFO e NFD somente quando estiver associada à respectiva nota.
 7. Use VALOR TOTAL DA NOTA, não total dos produtos. Peso é exclusivamente o campo PESO BRUTO da própria DANFE; se a célula estiver vazia, omita peso. Volume é QUANTIDADE no quadro TRANSPORTADOR / VOLUMES TRANSPORTADOS. Nunca use peso, cubagem, quantidade ou valor de DACTE/CT-e, etiqueta ou foto.
-8. pedido só pode conter um número explicitamente rotulado como pedido. Motivo de devolução não é pedido.
+8. pedido pode conter código, número ou texto. Preserve exatamente o conteúdo identificado como pedido no documento; não limite esse campo somente a dígitos. Nunca copie para pedido o número da NFO, da NFD, de CT-e ou de outra nota referenciada.
 9. CNPJ contém 14 dígitos, CEP contém 8 dígitos, série contém no máximo 3 dígitos e número da NF contém no máximo 9 dígitos.
 10. Não transforme mês/ano em uma data completa: se só estiver legível 03/2026, retorne exatamente 03/2026 e não invente um dia.
 11. quantidade_nota não é necessária; o servidor a calcula pela lista."""

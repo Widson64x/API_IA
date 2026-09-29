@@ -6,6 +6,27 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não publicado]
 
+### Adicionado
+
+- Preenchimento obrigatório de `bairro` e `numero` com `S/N` quando a entidade
+  foi identificada, mas esses dados não constam no documento.
+- Presença obrigatória de `pedido`, também com `S/N` quando não houver valor
+  comprovado no documento.
+- Leitura de `data_criacao` pelos metadados internos de PDFs e imagens, antes
+  de `quantidade_nota` no contrato de saída.
+- Leitura local das chaves NF-e diretamente do código de barras, com validação
+  dos 44 dígitos antes da inclusão no resultado.
+
+### Corrigido
+
+- Valores textuais no campo `pedido` voltam a ser preservados.
+- Números de NFO ou NFD deixam de ser copiados indevidamente para `pedido`.
+- Conferência visual da Mistral passou a usar recortes ampliados e dedicados às
+  chaves, sem aceitar sequências truncadas ou concatenadas inválidas.
+- Peso, volume e valor da NFD deixam de ser repetidos na NFO referenciada.
+- Linhas combinadas no formato `LOGRADOURO, NUMERO - BAIRRO` passam a ser
+  separadas corretamente entre `endereco`, `numero` e `bairro`.
+
 ## [2.0.1] - 2026-09-21
 
 ### Adicionado

@@ -1,13 +1,19 @@
 """Testes da reconciliação e validação dos dados de DANFE."""
 
 import base64
+import io
 import unittest
 from typing import Any
+
+import pymupdf
+import zxingcpp
+from PIL import Image
 
 from App import VERSAO_TUPLA, __version__
 from App.Routers.DanfeRouter import _decodificar_arquivo_base64
 from App.Schemas.DanfeSchema import DadosDANFE
 from App.Services.BaseExtractorService import DANFEExtratorBase
+from App.Services.MistralExtractorService import ExtratorMistral
 
 
 class ExtratorTeste(DANFEExtratorBase):
@@ -125,7 +131,7 @@ NFO 21016 EMISSAO 20/05/2026 Chave: {chave_original}
                         "peso": 0,
                         "valor": 0,
                     },
-                    "pedido": "ITEM AVARIADO",
+                    "pedido": "LOTE FRACIONADO",
                 }
             ],
         }
@@ -143,7 +149,11 @@ NFO 21016 EMISSAO 20/05/2026 Chave: {chave_original}
         self.assertEqual(resultado["tamanho"], "3")
         self.assertEqual(resultado["quantidade_nota"], 1)
         self.assertEqual(nota["Remetente"]["cnpj"], "06626253149384")
+        self.assertEqual(nota["Remetente"]["bairro"], "S/N")
+        self.assertEqual(nota["Remetente"]["numero"], "S/N")
         self.assertEqual(nota["Destinatario"]["cnpj"], "53359824000542")
+        self.assertEqual(nota["Destinatario"]["bairro"], "S/N")
+        self.assertEqual(nota["Destinatario"]["numero"], "S/N")
         self.assertEqual(nota["NFD"]["numero"], "10")
         self.assertEqual(nota["NFD"]["serie"], "50")
         self.assertEqual(nota["NFD"]["chave_acesso"], chave_devolucao)
@@ -154,7 +164,158 @@ NFO 21016 EMISSAO 20/05/2026 Chave: {chave_original}
         self.assertEqual(nota["NFO"]["chave_acesso"], chave_original)
         self.assertNotIn("peso", nota["NFO"])
         self.assertNotIn("valor", nota["NFO"])
-        self.assertNotIn("pedido", nota)
+        self.assertEqual(nota["pedido"], "LOTE FRACIONADO")
+
+    def test_data_criacao_vem_dos_metadados_antes_da_quantidade(self) -> None:
+        documento = pymupdf.open()
+        documento.new_page()
+        documento.set_metadata({"modDate": "D:20260918203635Z"})
+        conteudo = documento.tobytes()
+        documento.close()
+
+        resultado = self.extrator._validar_e_corrigir_extracao(
+            {"notaFiscalList": []},
+            conteudo_arquivo=conteudo,
+            nome_arquivo="nota.pdf",
+        )
+
+        self.assertEqual(resultado["data_criacao"], "2026-09-18")
+        campos = list(resultado)
+        self.assertLess(
+            campos.index("data_criacao"),
+            campos.index("quantidade_nota"),
+        )
+
+    def test_schema_mantem_bairro_e_numero_com_fallback(self) -> None:
+        dados = DadosDANFE(
+            quantidade_nota=1,
+            notaFiscalList=[{"Remetente": {"nome": "Empresa"}}],
+        )
+
+        remetente = dados.model_dump(exclude_none=True)["notaFiscalList"][0][
+            "Remetente"
+        ]
+        self.assertEqual(remetente["bairro"], "S/N")
+        self.assertEqual(remetente["numero"], "S/N")
+
+    def test_numero_da_nota_nao_e_reutilizado_como_pedido(self) -> None:
+        resultado = self.extrator._validar_e_corrigir_extracao(
+            {
+                "notaFiscalList": [
+                    {
+                        "NFO": {"numero": "63107", "serie": "1"},
+                        "pedido": "000063107",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(resultado["notaFiscalList"][0]["pedido"], "S/N")
+
+    def test_nfo_referenciada_nao_repete_totais_da_nfd(self) -> None:
+        resultado = self.extrator._validar_e_corrigir_extracao(
+            {
+                "notaFiscalList": [
+                    {
+                        "NFO": {
+                            "numero": "63107",
+                            "peso": 0.08,
+                            "volume": 1,
+                            "valor": 40.04,
+                        },
+                        "NFD": {
+                            "numero": "31679",
+                            "peso": 0.08,
+                            "volume": 1,
+                            "valor": 31.39,
+                        },
+                    }
+                ]
+            }
+        )
+
+        item = resultado["notaFiscalList"][0]
+        self.assertEqual(item["NFO"], {"numero": "63107"})
+        self.assertEqual(
+            item["NFD"],
+            {"numero": "31679", "peso": 0.08, "volume": 1.0, "valor": 31.39},
+        )
+
+    def test_conferencia_mistral_mescla_somente_chaves_validas(self) -> None:
+        chave_nfd = "15260401206820002655550020000316791049620168"
+        chave_nfo = "42260307591326000422550010000631071276480157"
+        dados = {
+            "notaFiscalList": [
+                {
+                    "NFO": {"numero": "63107", "serie": "1"},
+                    "NFD": {"numero": "31679", "serie": "2"},
+                }
+            ]
+        }
+        texto = (
+            '{"chaves": ['
+            f'{{"numero": "31679", "chave_acesso": "{chave_nfd}{chave_nfd}"}},'
+            f'{{"numero": "63107", "chave_acesso": "{chave_nfo}"}},'
+            '{"numero": "31679", "chave_acesso": "1526040120"}'
+            "]}"
+        )
+
+        ExtratorMistral._mesclar_chaves_do_texto(dados, texto)
+
+        item = dados["notaFiscalList"][0]
+        self.assertEqual(item["NFD"]["chave_acesso"], chave_nfd)
+        self.assertEqual(item["NFO"]["chave_acesso"], chave_nfo)
+
+    def test_conferencia_critica_corrige_bairro_e_peso_sem_dacte(self) -> None:
+        extrator = ExtratorMistral()
+        dados = {
+            "notaFiscalList": [
+                {
+                    "Remetente": {
+                        "cnpj": "01206820002655",
+                        "endereco": "ROD BR 316 KM 23/24",
+                        "bairro": "S/N",
+                        "numero": "S/N",
+                    },
+                    "NFD": {"numero": "31679", "peso": 34.44},
+                }
+            ]
+        }
+        conferencia = {
+            "notaFiscalList": [
+                {
+                    "Remetente": {
+                        "cnpj": "01.206.820/0002-55",
+                        "endereco": "ROD BR 316 KM 23/24, S/N - ITAPEPOCU",
+                        "bairro": "ITAPEPOCU",
+                        "numero": "S/N",
+                    },
+                    "NFD": {"numero": "31679", "peso": "0,080"},
+                }
+            ]
+        }
+
+        extrator._mesclar_campos_criticos(dados, conferencia)
+
+        item = dados["notaFiscalList"][0]
+        self.assertEqual(item["Remetente"]["endereco"], "ROD BR 316 KM 23/24")
+        self.assertEqual(item["Remetente"]["bairro"], "ITAPEPOCU")
+        self.assertEqual(item["Remetente"]["numero"], "S/N")
+        self.assertEqual(item["NFD"]["peso"], 0.08)
+
+    def test_chave_e_lida_diretamente_do_codigo_de_barras(self) -> None:
+        chave = "15260401206820002655550020000316791049620168"
+        codigo = zxingcpp.create_barcode(chave, zxingcpp.BarcodeFormat.Code128)
+        imagem = Image.fromarray(codigo.to_image(scale=4))
+        buffer = io.BytesIO()
+        imagem.save(buffer, format="PNG")
+
+        chaves = self.extrator._extrair_chaves_codigo_barras(
+            buffer.getvalue(),
+            "nota.png",
+        )
+
+        self.assertEqual(chaves, [chave])
 
     def test_descarta_chave_cnpj_e_campos_ausentes_invalidos(self) -> None:
         resultado = self.extrator._validar_e_corrigir_extracao(
@@ -174,7 +335,10 @@ NFO 21016 EMISSAO 20/05/2026 Chave: {chave_original}
             }
         )
         nota = resultado["notaFiscalList"][0]
-        self.assertEqual(nota["Remetente"], {"nome": "Empresa"})
+        self.assertEqual(
+            nota["Remetente"],
+            {"nome": "Empresa", "bairro": "S/N", "numero": "S/N"},
+        )
         self.assertNotIn("NFO", nota)
 
     def test_modelo_omite_nulos_na_serializacao_publica(self) -> None:
@@ -192,7 +356,9 @@ NFO 21016 EMISSAO 20/05/2026 Chave: {chave_original}
                 "extensao": "pdf",
                 "tamanho": "10",
                 "quantidade_nota": 1,
-                "notaFiscalList": [{"NFD": {"numero": "1"}}],
+                "notaFiscalList": [
+                    {"NFD": {"numero": "1"}, "pedido": "S/N"}
+                ],
             },
         )
 
@@ -218,6 +384,20 @@ outra linha"""
 
         self.assertEqual(entidade["nome"], "MOKSHA8 BR IND E COM DE MEDICAMENTO")
         self.assertEqual(entidade["endereco"], "ROD BR 316, KM 25")
+
+    def test_endereco_composto_separa_numero_e_bairro(self) -> None:
+        casos = (
+            "ROD BR 316 KM 23/24, S/N - ITAPEPOCU",
+            "ROD BR 316 KM 23/24, ITAPEPOCU",
+        )
+
+        for endereco in casos:
+            with self.subTest(endereco=endereco):
+                entidade = {"nome": "Empresa", "endereco": endereco}
+                self.extrator._normalizar_entidade(entidade, "")
+                self.assertEqual(entidade["endereco"], "ROD BR 316 KM 23/24")
+                self.assertEqual(entidade["numero"], "S/N")
+                self.assertEqual(entidade["bairro"], "ITAPEPOCU")
 
     def test_ocr_corrige_chaves_nome_e_peso_da_31679(self) -> None:
         chave_devolucao = "15260401206820002655550020000316791049620168"

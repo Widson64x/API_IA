@@ -20,8 +20,8 @@ class Entidade(ModeloDANFE):
     endereco: Optional[str] = Field(None, description="Logradouro")
     cidade: Optional[str] = Field(None, description="Município")
     uf: Optional[str] = Field(None, description="UF")
-    bairro: Optional[str] = Field(None, description="Bairro ou distrito")
-    numero: Optional[str] = Field(None, description="Número do endereço")
+    bairro: str = Field("S/N", description="Bairro ou distrito; S/N quando ausente")
+    numero: str = Field("S/N", description="Número do endereço; S/N quando ausente")
 
 
 class DadosNota(ModeloDANFE):
@@ -58,9 +58,11 @@ class NotaFiscalItem(ModeloDANFE):
         None,
         description="Nota fiscal de devolução exibida no cabeçalho da DANFE",
     )
-    pedido: Optional[str] = Field(
-        None,
-        description="Número explicitamente identificado como pedido",
+    pedido: str = Field(
+        "S/N",
+        description=(
+            "Código, número ou texto identificado como pedido; S/N quando ausente"
+        ),
     )
 
 

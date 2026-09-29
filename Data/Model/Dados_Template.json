@@ -2,6 +2,7 @@
   "arquivo": "nome_do_arquivo",
   "extensao": "pdf",
   "tamanho": "0",
+  "data_criacao": "YYYY-MM-DD",
   "quantidade_nota": 1,
   "notaFiscalList": [
     {
@@ -12,8 +13,8 @@
         "endereco": null,
         "cidade": null,
         "uf": null,
-        "bairro": null,
-        "numero": null
+        "bairro": "S/N",
+        "numero": "S/N"
       },
       "Destinatario": {
         "nome": null,
@@ -22,8 +23,8 @@
         "endereco": null,
         "cidade": null,
         "uf": null,
-        "bairro": null,
-        "numero": null
+        "bairro": "S/N",
+        "numero": "S/N"
       },
       "NFO": {
         "numero": null,
@@ -43,7 +44,7 @@
         "volume": null,
         "valor": null
       },
-      "pedido": null
+      "pedido": "S/N"
     }
   ]
 }

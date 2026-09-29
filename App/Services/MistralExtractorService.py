@@ -6,6 +6,8 @@ como o pixtral-12b que tem 128k de contexto e visão nativa.
 
 import base64
 import io
+import json
+import re
 
 import httpx
 from PIL import Image
@@ -120,13 +122,18 @@ class ExtratorMistral(DANFEExtratorBase):
             if self._faltam_chaves(dados_dict):
                 print("[DEBUG MISTRAL] Realizando conferência adicional das chaves de acesso...")
                 alvos = self._listar_notas_sem_chave(dados_dict)
-                prompt_chaves = f"""Faça uma conferência visual final das DANFEs para estas notas: {alvos}.
-Responda em JSON neste formato: {{"notaFiscalList":[{{"Remetente":{{"nome":null,"cnpj":null}},"Destinatario":{{"nome":null,"cnpj":null}},"NFO":{{"numero":null,"data":null,"chave_acesso":null}},"NFD":{{"numero":null,"data":null,"chave_acesso":null,"peso":null,"volume":null,"valor":null}}}}]}}.
-Cada chave de NF-e tem exatamente 44 dígitos e contém o modelo 55 nas posições 21 e 22. Não retorne chave de CT-e, cujo modelo é 57. Não invente nem complete dígitos ilegíveis.
-Copie os nomes exatamente como estão impressos. Para NFD, peso só pode vir da célula PESO BRUTO da DANFE; se estiver vazia, omita. Nunca use peso/cubagem do DACTE.
-Você pode usar a seção CHAVES NF-E de um DACTE somente para completar uma NFO já identificada pelo mesmo número; não transforme o DACTE em outra nota."""
+                prompt_chaves = f"""Leia EXCLUSIVAMENTE as chaves de acesso de NF-e das notas {alvos}.
+Procure a chave da DANFE abaixo do código de barras e também a seção CHAVES NF-E/CT-E dos DACTEs anexos.
+Cada chave de NF-e possui exatamente 44 dígitos, contém o modelo 55 nas posições 21 e 22 e traz o número da NF nas posições 26 a 34. Ignore chaves de CT-e, que contêm o modelo 57.
+Confira visualmente os 44 dígitos duas vezes, mas escreva cada chave somente UMA VEZ no JSON. Não resuma, não trunque, não concatene, não complete e não retorne outros dados.
+Responda somente neste formato JSON: {{"chaves":[{{"numero":"NUMERO_DA_NF","chave_acesso":"44_DIGITOS"}}]}}."""
                 req_chaves = [{"type": "text", "text": prompt_chaves}]
-                imagens_conferencia = self._recortar_para_conferencia(lista_imagens)
+                # A API Mistral aceita no máximo oito imagens por requisição.
+                # A ordem preserva todas as faixas das primeiras páginas, que
+                # normalmente concentram DANFE e DACTE com as chaves NF-e.
+                imagens_conferencia = self._recortar_para_conferencia(
+                    lista_imagens
+                )[:8]
                 for rotulo, imagem_bytes in imagens_conferencia:
                     req_chaves.append({"type": "text", "text": rotulo})
                     base64_imagem = base64.b64encode(imagem_bytes).decode("utf-8")
@@ -138,20 +145,31 @@ Você pode usar a seção CHAVES NF-E de um DACTE somente para completar uma NFO
                             },
                         }
                     )
-                resposta_chaves = await cliente.chat.completions.create(
-                    model=self.nome_modelo,
-                    messages=[{"role": "user", "content": req_chaves}],
-                    temperature=0,
-                    timeout=60.0,
-                )
-                texto_chaves = resposta_chaves.choices[0].message.content or ""
-                dados_chaves = self._limpar_e_converter_json(
-                    texto_chaves,
-                    conteudo_arquivo=conteudo_arquivo,
-                    nome_arquivo=nome_arquivo,
-                    texto_documento=texto_pdf,
-                )
-                self._mesclar_conferencia(dados_dict, dados_chaves)
+                try:
+                    resposta_chaves = await cliente.chat.completions.create(
+                        model=self.nome_modelo,
+                        messages=[{"role": "user", "content": req_chaves}],
+                        temperature=0,
+                        timeout=60.0,
+                    )
+                    texto_chaves = resposta_chaves.choices[0].message.content or ""
+                    print(
+                        "[DEBUG MISTRAL] Resposta da conferência de chaves "
+                        f"(Tamanho: {len(texto_chaves)} caracteres):\n"
+                        f"{texto_chaves[:1200]}"
+                    )
+                    self._mesclar_chaves_do_texto(dados_dict, texto_chaves)
+                except Exception as erro_conferencia:
+                    print(
+                        "[DEBUG MISTRAL] Conferência adicional indisponível; "
+                        f"mantendo extração principal: {erro_conferencia}"
+                    )
+
+            await self._conferir_campos_criticos(
+                cliente,
+                dados_dict,
+                lista_imagens,
+            )
             print(f"[DEBUG MISTRAL] Parse concluído com sucesso!")
             
             return DadosDANFE(**dados_dict)
@@ -187,6 +205,147 @@ Você pode usar a seção CHAVES NF-E de um DACTE somente para completar uma NFO
             if pagina.get("markdown")
         )
 
+    async def _conferir_campos_criticos(
+        self,
+        cliente: AsyncOpenAI,
+        dados: dict,
+        imagens: list[bytes],
+    ) -> None:
+        """Confere endereço e peso apenas na DANFE principal, sem anexos."""
+
+        if not imagens or not dados.get("notaFiscalList"):
+            return
+
+        alvos: list[dict] = []
+        for item in dados["notaFiscalList"]:
+            alvos.append(
+                {
+                    "Remetente": item.get("Remetente", {}),
+                    "Destinatario": item.get("Destinatario", {}),
+                    "NFD": {"numero": (item.get("NFD") or {}).get("numero")},
+                }
+            )
+
+        imagem = Image.open(io.BytesIO(imagens[0])).convert("RGB")
+        largura, altura = imagem.size
+        regioes = (
+            (
+                "BLOCO ISOLADO DO REMETENTE/EMITENTE",
+                (0, int(altura * 0.02), int(largura * 0.56), int(altura * 0.20)),
+            ),
+            (
+                "BLOCO ISOLADO DO DESTINATARIO",
+                (0, int(altura * 0.17), largura, int(altura * 0.32)),
+            ),
+            (
+                "TRANSPORTADOR E PESO BRUTO",
+                (0, int(altura * 0.31), largura, int(altura * 0.49)),
+            ),
+        )
+
+        prompt = f"""Confira somente a DANFE atual mostrada nesta imagem. Ignore completamente DACTE, CT-e e anexos.
+Entidades e número esperado: {json.dumps(alvos, ensure_ascii=False)}.
+Leia literalmente as linhas de endereço do Remetente e do Destinatario. Quando houver "LOGRADOURO, NUMERO - BAIRRO", separe endereco, numero e bairro. O trecho textual depois do hífen pertence obrigatoriamente ao bairro, mesmo que não exista uma coluna chamada BAIRRO. Preserve S/N somente como numero; não use S/N como bairro se houver um nome depois do hífen.
+Para a NFD, leia peso exclusivamente da célula PESO BRUTO do quadro TRANSPORTADOR / VOLUMES TRANSPORTADOS desta DANFE. Não use peso, cubagem ou peso de cálculo de DACTE.
+Responda somente JSON neste formato: {{"notaFiscalList":[{{"Remetente":{{"cnpj":null,"endereco":null,"bairro":null,"numero":null}},"Destinatario":{{"cnpj":null,"endereco":null,"bairro":null,"numero":null}},"NFD":{{"numero":null,"peso":null}}}}]}}."""
+        conteudo = [{"type": "text", "text": prompt}]
+        for rotulo, caixa in regioes:
+            recorte = imagem.crop(caixa)
+            if recorte.width < 3400:
+                proporcao = 3400 / recorte.width
+                recorte = recorte.resize(
+                    (3400, int(recorte.height * proporcao)),
+                    Image.Resampling.LANCZOS,
+                )
+            buffer = io.BytesIO()
+            recorte.save(buffer, format="JPEG", quality=96, optimize=True)
+            imagem_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            conteudo.extend(
+                [
+                    {"type": "text", "text": rotulo},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{imagem_b64}"
+                        },
+                    },
+                ]
+            )
+
+        try:
+            resposta = await cliente.chat.completions.create(
+                model=self.nome_modelo,
+                messages=[{"role": "user", "content": conteudo}],
+                temperature=0,
+                timeout=60.0,
+            )
+            texto = resposta.choices[0].message.content or ""
+            print(
+                "[DEBUG MISTRAL] Resposta da conferência de campos críticos "
+                f"(Tamanho: {len(texto)} caracteres):\n{texto[:1200]}"
+            )
+            correspondencia = re.search(
+                r"```(?:json)?\s*(\{.*\})\s*```",
+                texto.strip(),
+                re.DOTALL,
+            )
+            objeto = json.loads(
+                correspondencia.group(1) if correspondencia else texto.strip()
+            )
+            if isinstance(objeto, dict):
+                self._mesclar_campos_criticos(dados, objeto)
+        except Exception as erro:
+            print(
+                "[DEBUG MISTRAL] Conferência de campos críticos indisponível; "
+                f"mantendo dados validados: {erro}"
+            )
+
+    def _mesclar_campos_criticos(self, destino: dict, origem: dict) -> None:
+        """Mescla somente endereço e peso associados à mesma entidade/nota."""
+
+        itens_origem = origem.get("notaFiscalList", [])
+        for indice, item in enumerate(destino.get("notaFiscalList", [])):
+            if indice >= len(itens_origem) or not isinstance(itens_origem[indice], dict):
+                continue
+            confirmado = itens_origem[indice]
+
+            for entidade_nome in ("Remetente", "Destinatario"):
+                entidade = item.get(entidade_nome)
+                entidade_confirmada = confirmado.get(entidade_nome)
+                if not isinstance(entidade, dict) or not isinstance(
+                    entidade_confirmada, dict
+                ):
+                    continue
+                cnpj_atual = re.sub(r"\D", "", str(entidade.get("cnpj", "")))
+                cnpj_confirmado = re.sub(
+                    r"\D", "", str(entidade_confirmada.get("cnpj", ""))
+                )
+                if (
+                    cnpj_atual
+                    and cnpj_confirmado
+                    and cnpj_atual != cnpj_confirmado
+                    and cnpj_atual[:8] != cnpj_confirmado[:8]
+                ):
+                    continue
+                entidade_confirmada = entidade_confirmada.copy()
+                self._normalizar_entidade(entidade_confirmada, "")
+                for campo in ("endereco", "bairro", "numero"):
+                    valor = entidade_confirmada.get(campo)
+                    if valor and valor != "S/N":
+                        entidade[campo] = valor
+
+            nfd = item.get("NFD")
+            nfd_confirmada = confirmado.get("NFD")
+            if not isinstance(nfd, dict) or not isinstance(nfd_confirmada, dict):
+                continue
+            numero_atual = str(nfd.get("numero", "")).lstrip("0") or "0"
+            numero_confirmado = (
+                str(nfd_confirmada.get("numero", "")).lstrip("0") or "0"
+            )
+            peso = self._converter_decimal(nfd_confirmada.get("peso"))
+            if numero_atual == numero_confirmado and peso is not None and peso > 0:
+                nfd["peso"] = peso
+
     @staticmethod
     def _faltam_chaves(dados: dict) -> bool:
         """Indica se uma nota identificada ainda não possui sua chave validada."""
@@ -213,28 +372,79 @@ Você pode usar a seção CHAVES NF-E de um DACTE somente para completar uma NFO
     def _recortar_para_conferencia(
         imagens: list[bytes],
     ) -> list[tuple[str, bytes]]:
-        """Recorta topo e rodapé para ampliar os campos pequenos da DANFE."""
+        """Divide páginas em faixas ampliadas para leitura dos 44 dígitos."""
 
         recortes: list[tuple[str, bytes]] = []
         for numero_pagina, imagem_bytes in enumerate(imagens, start=1):
             imagem = Image.open(io.BytesIO(imagem_bytes)).convert("RGB")
             largura, altura = imagem.size
             regioes = (
-                ("TOPO", (0, 0, largura, int(altura * 0.70))),
-                ("RODAPÉ", (0, int(altura * 0.60), largura, altura)),
+                ("FAIXA SUPERIOR", (0, 0, largura, int(altura * 0.38))),
+                (
+                    "FAIXA CENTRAL",
+                    (0, int(altura * 0.28), largura, int(altura * 0.72)),
+                ),
+                ("FAIXA INFERIOR", (0, int(altura * 0.62), largura, altura)),
+                (
+                    "QUADRO CHAVES NF-E/CT-E",
+                    (
+                        int(largura * 0.35),
+                        int(altura * 0.52),
+                        largura,
+                        int(altura * 0.90),
+                    ),
+                ),
             )
             for nome_regiao, caixa in regioes:
+                recorte = imagem.crop(caixa)
+                if recorte.width < 2400:
+                    proporcao = 2400 / recorte.width
+                    recorte = recorte.resize(
+                        (2400, int(recorte.height * proporcao)),
+                        Image.Resampling.LANCZOS,
+                    )
                 buffer = io.BytesIO()
-                imagem.crop(caixa).save(
+                recorte.save(
                     buffer,
                     format="JPEG",
-                    quality=92,
+                    quality=95,
                     optimize=True,
                 )
                 recortes.append(
                     (f"PÁGINA {numero_pagina} — {nome_regiao}:", buffer.getvalue())
                 )
         return recortes
+
+    @classmethod
+    def _mesclar_chaves_do_texto(cls, destino: dict, texto: str) -> None:
+        """Associa somente chaves NF-e válidas ao número contido na própria chave."""
+
+        chaves_validas = cls._extrair_chaves_acesso(texto)
+        # Alguns modelos podem repetir uma chave sem separador. Se a sequência
+        # possuir blocos exatos de 44 dígitos, cada bloco ainda precisa passar
+        # integralmente pelo dígito verificador antes de ser aceito.
+        for sequencia in re.findall(r"(?<!\d)\d{88,}(?!\d)", texto):
+            if len(sequencia) % 44:
+                continue
+            for inicio in range(0, len(sequencia), 44):
+                candidata = sequencia[inicio : inicio + 44]
+                if cls._chave_acesso_valida(candidata) and candidata not in chaves_validas:
+                    chaves_validas.append(candidata)
+
+        chaves_por_numero = {
+            chave[25:34].lstrip("0") or "0": chave
+            for chave in chaves_validas
+        }
+        for item in destino.get("notaFiscalList", []):
+            for tipo in ("NFO", "NFD"):
+                nota = item.get(tipo)
+                if not isinstance(nota, dict) or not nota.get("numero"):
+                    continue
+                numero = str(nota["numero"]).lstrip("0") or "0"
+                chave = chaves_por_numero.get(numero)
+                if chave:
+                    nota["chave_acesso"] = chave
+                    nota["serie"] = chave[22:25].lstrip("0") or "0"
 
     @staticmethod
     def _mesclar_conferencia(destino: dict, origem: dict) -> None:

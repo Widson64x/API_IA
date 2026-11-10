@@ -19,11 +19,11 @@ class ExtratorGroq(DANFEExtratorBase):
         nome_modelo (str): Identificador do modelo Vision (ex: qwen/qwen3.6-27b).
     """
 
-    def __init__(self, nome_modelo: str = "qwen/qwen3.6-27b"):
+    def __init__(self, nome_modelo: str = "qwen/qwen3.8-27b"):
         """Inicializa o extrator Groq.
 
         Args:
-            nome_modelo (str): O modelo hospedado na Groq (padrão: Qwen 3.6 27B Vision).
+            nome_modelo (str): O modelo hospedado na Groq (padrão: Qwen 3.8 27B Vision).
         """
         self.nome_modelo = nome_modelo
         self.api_key = configuracao.GROQ_API_KEY
@@ -61,12 +61,15 @@ class ExtratorGroq(DANFEExtratorBase):
         # Se temos texto extraído com qualidade (sem caracteres corrompidos), usamos o LLaMA 3.3 70B Versatile
         tem_texto_limpo = bool(texto_pdf.strip() and len(texto_pdf) > 50 and "PÀGT" not in texto_pdf)
 
+        modelos_visao = {self.nome_modelo}
+        modelos_texto = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
         modelos_tentativa = []
         if tem_texto_limpo:
-            modelos_tentativa.append("llama-3.3-70b-versatile")
-        
-        # Modelo de visão da Groq (suporta imagem)
-        modelos_tentativa.extend(["llama-3.2-11b-vision-preview", "llama-3.3-70b-versatile"])
+            modelos_tentativa.extend(modelos_texto)
+
+        # Modelo de visão da Groq (suporta imagem); serve também de fallback para PDFs escaneados
+        modelos_tentativa.append(self.nome_modelo)
 
         # Remove duplicados mantendo a ordem
         modelos_unicos = []
@@ -90,7 +93,7 @@ class ExtratorGroq(DANFEExtratorBase):
             conteudo_requisicao = [{"type": "text", "text": prompt_final}]
 
             # Só envia imagem se o modelo for de visão
-            if "vision" in modelo_atual:
+            if modelo_atual in modelos_visao:
                 if extensao == "pdf":
                     lista_imagens = self._converter_pdf_para_imagens(conteudo_arquivo, dpi=72)
                 else:

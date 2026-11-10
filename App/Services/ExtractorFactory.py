@@ -60,7 +60,7 @@ class ExtratorFabrica:
         elif issubclass(classe_extrator, ExtratorOpenRouter):
             return classe_extrator(nome_modelo="openrouter")
         elif issubclass(classe_extrator, ExtratorGroq):
-            return classe_extrator(nome_modelo="llama-3.3-70b-versatile")
+            return classe_extrator(nome_modelo="qwen/qwen3.8-27b")
         elif issubclass(classe_extrator, ExtratorMistral):
             return classe_extrator(nome_modelo="pixtral-12b-2409")
 

@@ -19,6 +19,10 @@ e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- Extrator Groq deixou de usar modelos descontinuados ou sem acesso
+  (`llama-3.2-11b-vision-preview` e `llama-3.3-70b-versatile`). Passa a usar
+  `qwen/qwen3.8-27b` para visão e `openai/gpt-oss-120b`/`gpt-oss-20b` para PDFs
+  com texto.
 - Valores textuais no campo `pedido` voltam a ser preservados.
 - Números de NFO ou NFD deixam de ser copiados indevidamente para `pedido`.
 - Conferência visual da Mistral passou a usar recortes ampliados e dedicados às
